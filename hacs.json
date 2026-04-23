@@ -6,9 +6,6 @@
     "BE",
     "LU"
   ],
-  "domains": [
-    "sensor"
-  ],
   "homeassistant": "2024.1.0",
   "render_readme": true
 }
