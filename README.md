@@ -2,6 +2,17 @@
 
 This repository contains a custom Home Assistant integration that connects to a Homey Energy Dongle over its local WebSocket API and exposes common DSMR readings as sensors.
 
+## HACS
+
+This repository is structured for use as a HACS custom repository.
+
+1. In HACS, add `https://github.com/chill-uk/homey-p1-ha` as an `Integration` repository.
+2. Install `Homey P1`.
+3. Restart Home Assistant.
+4. Add the integration from `Settings -> Devices & Services`.
+
+For versioned installs and upgrades in HACS, create GitHub releases such as `v0.1.0`. If there are no releases yet, HACS will install from the default branch instead.
+
 ## What it does
 
 - Connects to `ws://<homey-p1-ip>/ws`

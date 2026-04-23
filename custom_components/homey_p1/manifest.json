@@ -1,9 +1,12 @@
 {
   "domain": "homey_p1",
   "name": "Homey P1",
-  "codeowners": [],
+  "codeowners": [
+    "@chill-uk"
+  ],
   "config_flow": true,
-  "documentation": "https://github.com/athombv/node-dsmr-parser",
+  "documentation": "https://github.com/chill-uk/homey-p1-ha#readme",
+  "issue_tracker": "https://github.com/chill-uk/homey-p1-ha/issues",
   "integration_type": "hub",
   "iot_class": "local_push",
   "loggers": ["custom_components.homey_p1"],
