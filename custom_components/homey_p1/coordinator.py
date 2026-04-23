@@ -10,6 +10,7 @@ from aiohttp import ClientError, ClientSession, WSMessageTypeError, WSMsgType
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME
+from homeassistant.core import Event
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -31,12 +32,13 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
             name=entry.data[CONF_NAME],
         )
         self.entry = entry
-        self.host: str = entry.data[CONF_HOST]
+        self.host: str = entry.options.get(CONF_HOST, entry.data[CONF_HOST])
         self.url = f"ws://{self.host}:{DEFAULT_PORT}{WS_PATH}"
         self.session: ClientSession = async_get_clientsession(hass)
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
         self._available = False
+        self._unique_id_updated = False
         self.data = {}
 
     @property
@@ -55,6 +57,10 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+
+    async def async_handle_hass_stop(self, event: Event) -> None:
+        """Stop the websocket listener during Home Assistant shutdown."""
+        await self.async_shutdown()
 
     async def _run(self) -> None:
         """Maintain a websocket connection and parse telegrams."""
@@ -115,6 +121,7 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
                         parsed = parse_dsmr_telegram(telegram)
                         if parsed:
                             merged = {**self.data, **parsed}
+                            await self._async_update_unique_id(merged)
                             self.async_set_updated_data(merged)
                         telegram = ""
                         collecting = False
@@ -126,3 +133,30 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
 
         self._available = available
         self.async_update_listeners()
+
+    async def _async_update_unique_id(self, data: dict[str, object]) -> None:
+        """Promote the config entry unique ID to the actual meter ID."""
+        if self._unique_id_updated:
+            return
+
+        equipment_id = data.get("equipment_id")
+        if not isinstance(equipment_id, str) or not equipment_id:
+            return
+
+        if self.entry.unique_id == equipment_id:
+            self._unique_id_updated = True
+            return
+
+        self.hass.config_entries.async_update_entry(
+            self.entry,
+            unique_id=equipment_id,
+        )
+        self._unique_id_updated = True
+
+    @property
+    def device_identifiers(self) -> set[tuple[str, str]]:
+        """Return identifiers for the main device."""
+        identifiers = {(self.entry.domain, f"host:{self.host.lower()}")}
+        if equipment_id := self.data.get("equipment_id"):
+            identifiers.add((self.entry.domain, f"meter:{equipment_id}"))
+        return identifiers

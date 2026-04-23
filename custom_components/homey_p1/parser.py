@@ -10,11 +10,14 @@ _LOGGER = logging.getLogger(__name__)
 
 LINE_RE = re.compile(r"^(?P<obis>[\d-]+:[\d.]+(?:\.\d+)?)\((?P<value>.*)\)$")
 UNIT_RE = re.compile(r"^(?P<value>[-\d.]+)\*(?P<unit>[A-Za-z0-9]+)$")
-GAS_RE = re.compile(r"^(?P<timestamp>\d{12}[SW])\((?P<value>[-\d.]+)\*m3\)$")
+GROUP_RE = re.compile(r"\(([^()]*)\)")
 
 OBIS_MAP: dict[str, tuple[str, callable]] = {
+    "1-3:0.2.8": ("dsmr_version", str),
     "0-0:96.1.0": ("equipment_id", str),
+    "0-0:96.1.1": ("equipment_id", str),
     "0-0:96.14.0": ("tariff_indicator", int),
+    "0-0:1.0.0": ("telegram_timestamp", str),
     "1-0:1.8.1": ("energy_import_tariff_1", float),
     "1-0:1.8.2": ("energy_import_tariff_2", float),
     "1-0:2.8.1": ("energy_export_tariff_1", float),
@@ -33,8 +36,15 @@ OBIS_MAP: dict[str, tuple[str, callable]] = {
     "1-0:32.7.0": ("voltage_l1", float),
     "1-0:52.7.0": ("voltage_l2", float),
     "1-0:72.7.0": ("voltage_l3", float),
+    "1-0:32.32.0": ("voltage_sags_l1", int),
+    "1-0:52.32.0": ("voltage_sags_l2", int),
+    "1-0:72.32.0": ("voltage_sags_l3", int),
+    "1-0:32.36.0": ("voltage_swells_l1", int),
+    "1-0:52.36.0": ("voltage_swells_l2", int),
+    "1-0:72.36.0": ("voltage_swells_l3", int),
     "0-0:96.7.21": ("power_failures", int),
     "0-0:96.7.9": ("long_power_failures", int),
+    "0-1:96.1.0": ("gas_equipment_id", str),
 }
 
 
@@ -48,10 +58,12 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
             continue
 
         if line.startswith("0-1:24.2.1"):
-            gas_match = GAS_RE.search(_extract_payload(line))
-            if gas_match:
-                parsed["gas_delivered"] = float(gas_match.group("value"))
-                parsed["gas_timestamp"] = gas_match.group("timestamp")
+            gas_values = _extract_groups(line)
+            if len(gas_values) >= 2:
+                parsed["gas_timestamp"] = gas_values[0]
+                value = _normalize_value(gas_values[1], float)
+                if value is not None:
+                    parsed["gas_delivered"] = value
             continue
 
         match = LINE_RE.match(line)
@@ -79,6 +91,11 @@ def _extract_payload(line: str) -> str:
     """Return the content after the first opening parenthesis."""
     _, payload = line.split("(", 1)
     return payload[:-1]
+
+
+def _extract_groups(line: str) -> list[str]:
+    """Return all parenthesized groups from a telegram line."""
+    return GROUP_RE.findall(line)
 
 
 def _normalize_value(payload: str, caster: callable) -> Any | None:

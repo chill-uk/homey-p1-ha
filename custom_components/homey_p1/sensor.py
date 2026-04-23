@@ -79,6 +79,54 @@ SENSORS: tuple[HomeyP1SensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
     ),
     HomeyP1SensorDescription(
+        key="power_consumption_l1",
+        translation_key="power_consumption_l1",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="power_consumption_l2",
+        translation_key="power_consumption_l2",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="power_consumption_l3",
+        translation_key="power_consumption_l3",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="power_production_l1",
+        translation_key="power_production_l1",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="power_production_l2",
+        translation_key="power_production_l2",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="power_production_l3",
+        translation_key="power_production_l3",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
         key="gas_delivered",
         translation_key="gas_delivered",
         native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
@@ -150,6 +198,42 @@ SENSORS: tuple[HomeyP1SensorDescription, ...] = (
         icon="mdi:flash-alert",
         enabled_by_default=False,
     ),
+    HomeyP1SensorDescription(
+        key="voltage_sags_l1",
+        translation_key="voltage_sags_l1",
+        icon="mdi:sine-wave",
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="voltage_sags_l2",
+        translation_key="voltage_sags_l2",
+        icon="mdi:sine-wave",
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="voltage_sags_l3",
+        translation_key="voltage_sags_l3",
+        icon="mdi:sine-wave",
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="voltage_swells_l1",
+        translation_key="voltage_swells_l1",
+        icon="mdi:sine-wave",
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="voltage_swells_l2",
+        translation_key="voltage_swells_l2",
+        icon="mdi:sine-wave",
+        enabled_by_default=False,
+    ),
+    HomeyP1SensorDescription(
+        key="voltage_swells_l3",
+        translation_key="voltage_swells_l3",
+        icon="mdi:sine-wave",
+        enabled_by_default=False,
+    ),
 )
 
 
@@ -179,15 +263,10 @@ class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
+        self.entry = entry
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_entity_registry_enabled_default = description.enabled_by_default
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            manufacturer="Athom",
-            model="Homey Energy Dongle",
-            name=entry.data[CONF_NAME],
-        )
 
     @property
     def available(self) -> bool:
@@ -198,3 +277,15 @@ class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
     def native_value(self):
         """Return the sensor value."""
         return self.coordinator.data.get(self.entity_description.key)
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers=self.coordinator.device_identifiers,
+            manufacturer="Athom",
+            model="Homey Energy Dongle",
+            name=self.entry.data[CONF_NAME],
+            serial_number=self.coordinator.data.get("equipment_id"),
+            sw_version=self.coordinator.data.get("dsmr_version"),
+        )

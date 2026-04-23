@@ -13,6 +13,10 @@ This repository is structured for use as a HACS custom repository.
 
 For versioned installs and upgrades in HACS, create GitHub releases such as `v0.1.0`. If there are no releases yet, HACS will install from the default branch instead.
 
+## Configuration
+
+After the integration is added, you can update the Homey Energy Dongle IP address from the integration options instead of removing and re-adding the integration.
+
 ## What it does
 
 - Connects to `ws://<homey-p1-ip>/ws`

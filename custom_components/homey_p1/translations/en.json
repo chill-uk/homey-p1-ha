@@ -1,12 +1,35 @@
 {
   "config": {
+    "error": {
+      "cannot_connect": "Failed to connect to the Homey Energy Dongle.",
+      "connection_limit": "The Homey Energy Dongle has reached its local API connection limit.",
+      "local_api_disabled": "The Homey Energy Dongle Local API is disabled."
+    },
     "step": {
+      "init": {
+        "title": "Homey P1 options",
+        "description": "Update the Homey Energy Dongle IP address.",
+        "data": {
+          "host": "Homey Energy Dongle IP address"
+        }
+      },
       "user": {
         "title": "Connect to Homey P1",
         "description": "Add your Homey Energy Dongle local WebSocket endpoint.",
         "data": {
           "host": "Homey Energy Dongle IP address",
           "name": "Name"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Homey P1 options",
+        "description": "Update the Homey Energy Dongle IP address.",
+        "data": {
+          "host": "Homey Energy Dongle IP address"
         }
       }
     }
@@ -30,6 +53,24 @@
       },
       "power_production": {
         "name": "Power production"
+      },
+      "power_consumption_l1": {
+        "name": "Power consumption L1"
+      },
+      "power_consumption_l2": {
+        "name": "Power consumption L2"
+      },
+      "power_consumption_l3": {
+        "name": "Power consumption L3"
+      },
+      "power_production_l1": {
+        "name": "Power production L1"
+      },
+      "power_production_l2": {
+        "name": "Power production L2"
+      },
+      "power_production_l3": {
+        "name": "Power production L3"
       },
       "gas_delivered": {
         "name": "Gas delivered"
@@ -60,6 +101,24 @@
       },
       "long_power_failures": {
         "name": "Long power failures"
+      },
+      "voltage_sags_l1": {
+        "name": "Voltage sags L1"
+      },
+      "voltage_sags_l2": {
+        "name": "Voltage sags L2"
+      },
+      "voltage_sags_l3": {
+        "name": "Voltage sags L3"
+      },
+      "voltage_swells_l1": {
+        "name": "Voltage swells L1"
+      },
+      "voltage_swells_l2": {
+        "name": "Voltage swells L2"
+      },
+      "voltage_swells_l3": {
+        "name": "Voltage swells L3"
       }
     }
   }
