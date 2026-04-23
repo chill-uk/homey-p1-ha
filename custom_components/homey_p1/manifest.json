@@ -1,10 +1,10 @@
 {
   "domain": "homey_p1",
   "name": "Homey P1",
-  "config_flow": true,
   "codeowners": [
     "@chill-uk"
   ],
+  "config_flow": true,
   "documentation": "https://github.com/chill-uk/homey-p1-ha#readme",
   "integration_type": "hub",
   "iot_class": "local_push",
