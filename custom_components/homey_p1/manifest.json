@@ -1,0 +1,12 @@
+{
+  "domain": "homey_p1",
+  "name": "Homey P1",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/athombv/node-dsmr-parser",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "loggers": ["custom_components.homey_p1"],
+  "requirements": [],
+  "version": "0.1.0"
+}

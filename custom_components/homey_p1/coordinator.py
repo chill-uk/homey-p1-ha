@@ -1,0 +1,128 @@
+"""Coordinator for the Homey P1 integration."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import logging
+
+from aiohttp import ClientError, ClientSession, WSMessageTypeError, WSMsgType
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_NAME
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+
+from .const import DEFAULT_PORT, RECONNECT_DELAY_SECONDS, WS_PATH
+from .parser import parse_dsmr_telegram
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
+    """Coordinate Homey P1 websocket updates."""
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=entry.data[CONF_NAME],
+        )
+        self.entry = entry
+        self.host: str = entry.data[CONF_HOST]
+        self.url = f"ws://{self.host}:{DEFAULT_PORT}{WS_PATH}"
+        self.session: ClientSession = async_get_clientsession(hass)
+        self._task: asyncio.Task[None] | None = None
+        self._stopped = asyncio.Event()
+        self._available = False
+        self.data = {}
+
+    @property
+    def available(self) -> bool:
+        """Return whether the websocket is connected."""
+        return self._available
+
+    async def async_start(self) -> None:
+        """Start the websocket listener."""
+        self._task = self.hass.async_create_task(self._run())
+
+    async def async_shutdown(self) -> None:
+        """Stop the websocket listener."""
+        self._stopped.set()
+        if self._task:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+
+    async def _run(self) -> None:
+        """Maintain a websocket connection and parse telegrams."""
+        while not self._stopped.is_set():
+            try:
+                await self._listen()
+            except asyncio.CancelledError:
+                raise
+            except (ClientError, TimeoutError, ValueError, WSMessageTypeError) as err:
+                _LOGGER.warning("Homey P1 connection error: %s", err)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Unexpected Homey P1 error")
+
+            self._set_available(False)
+            if self._stopped.is_set():
+                break
+            await asyncio.sleep(RECONNECT_DELAY_SECONDS)
+
+    async def _listen(self) -> None:
+        """Listen for telegrams on the Homey websocket."""
+        buffer = ""
+        telegram = ""
+        collecting = False
+
+        _LOGGER.info("Connecting to Homey P1 websocket at %s", self.url)
+        async with self.session.ws_connect(
+            self.url,
+            heartbeat=30,
+            autoping=True,
+        ) as websocket:
+            self._set_available(True)
+            _LOGGER.info("Connected to Homey P1 websocket")
+
+            async for message in websocket:
+                if message.type == WSMsgType.TEXT:
+                    buffer += message.data
+                elif message.type == WSMsgType.BINARY:
+                    buffer += message.data.decode(errors="ignore")
+                elif message.type in (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSED):
+                    break
+                else:
+                    continue
+
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.rstrip("\r")
+
+                    if line.startswith("/"):
+                        telegram = f"{line}\n"
+                        collecting = True
+                        continue
+
+                    if not collecting:
+                        continue
+
+                    telegram += f"{line}\n"
+                    if line.startswith("!"):
+                        parsed = parse_dsmr_telegram(telegram)
+                        if parsed:
+                            merged = {**self.data, **parsed}
+                            self.async_set_updated_data(merged)
+                        telegram = ""
+                        collecting = False
+
+    def _set_available(self, available: bool) -> None:
+        """Update availability and notify listeners."""
+        if self._available == available:
+            return
+
+        self._available = available
+        self.async_update_listeners()

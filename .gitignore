@@ -1,0 +1,16 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Local virtual environments
+.venv/
+venv/
+
+# Home Assistant local config and test artifacts
+.storage/
+config/
+deps/
+
+# Editor settings
+.idea/
+.vscode/

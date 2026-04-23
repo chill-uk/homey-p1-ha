@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Homey P1",
+        "description": "Add your Homey Energy Dongle local WebSocket endpoint.",
+        "data": {
+          "host": "Homey Energy Dongle IP address",
+          "name": "Name"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "energy_import_tariff_1": {
+        "name": "Energy import tariff 1"
+      },
+      "energy_import_tariff_2": {
+        "name": "Energy import tariff 2"
+      },
+      "energy_export_tariff_1": {
+        "name": "Energy export tariff 1"
+      },
+      "energy_export_tariff_2": {
+        "name": "Energy export tariff 2"
+      },
+      "power_consumption": {
+        "name": "Power consumption"
+      },
+      "power_production": {
+        "name": "Power production"
+      },
+      "gas_delivered": {
+        "name": "Gas delivered"
+      },
+      "voltage_l1": {
+        "name": "Voltage L1"
+      },
+      "voltage_l2": {
+        "name": "Voltage L2"
+      },
+      "voltage_l3": {
+        "name": "Voltage L3"
+      },
+      "current_l1": {
+        "name": "Current L1"
+      },
+      "current_l2": {
+        "name": "Current L2"
+      },
+      "current_l3": {
+        "name": "Current L3"
+      },
+      "tariff_indicator": {
+        "name": "Tariff indicator"
+      },
+      "power_failures": {
+        "name": "Power failures"
+      },
+      "long_power_failures": {
+        "name": "Long power failures"
+      }
+    }
+  }
+}
