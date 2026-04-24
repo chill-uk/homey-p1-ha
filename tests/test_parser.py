@@ -41,6 +41,9 @@ SAMPLE_TELEGRAM = r"""/XYZ5\TESTMETER-0001
 0-1:24.1.0(003)
 0-1:96.1.0(4739383736353433323130393837363534)
 0-1:24.2.1(240424101000S)(00123.456*m3)
+0-2:24.1.0(004)
+0-2:96.1.0(4831323334353637383930313233343536)
+0-2:24.2.1(240424101100S)(00456.789*GJ)
 !ABCD
 """
 
@@ -88,6 +91,16 @@ class ParseTelegramTests(unittest.TestCase):
         )
         self.assertRegex(result["gas_timestamp"], r"^\d{12}[SW]$")
         self.assertGreaterEqual(result["gas_delivered"], 0.0)
+        self.assertIn("mbus_channels", result)
+        self.assertEqual(sorted(result["mbus_channels"]), ["1", "2"])
+        self.assertEqual(result["mbus_channels"]["1"]["device_type"], 3)
+        self.assertEqual(result["mbus_channels"]["1"]["unit"], "m3")
+        self.assertEqual(result["mbus_channels"]["2"]["device_type"], 4)
+        self.assertEqual(result["mbus_channels"]["2"]["unit"], "GJ")
+        self.assertEqual(
+            result["mbus_channels"]["2"]["meter_id"],
+            bytes.fromhex(result["mbus_channels"]["2"]["equipment_id"]).decode("ascii"),
+        )
 
     def test_ignores_unknown_lines_and_empty_telegram(self) -> None:
         result = parser.parse_dsmr_telegram("/HEADER\n1-0:99.99.9(abc)\n!0000\n")

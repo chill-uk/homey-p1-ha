@@ -33,7 +33,6 @@ class HomeyP1SensorDescription(SensorEntityDescription):
     """Describe a Homey P1 sensor."""
 
     enabled_by_default: bool = True
-    meter_kind: str = "electricity"
 
 
 SENSORS: tuple[HomeyP1SensorDescription, ...] = (
@@ -126,14 +125,6 @@ SENSORS: tuple[HomeyP1SensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         enabled_by_default=False,
-    ),
-    HomeyP1SensorDescription(
-        key="gas_delivered",
-        translation_key="gas_delivered",
-        native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
-        device_class=SensorDeviceClass.GAS,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        meter_kind="mbus",
     ),
     HomeyP1SensorDescription(
         key="voltage_l1",
@@ -246,9 +237,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up Homey P1 sensors."""
     coordinator: HomeyP1Coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
+    entities: list[SensorEntity] = [
         HomeyP1Sensor(coordinator, entry, description) for description in SENSORS
-    )
+    ]
+    for channel in sorted(coordinator.data.get("mbus_channels", {}), key=int):
+        entities.append(HomeyP1MBusDeliveredSensor(coordinator, entry, channel))
+    async_add_entities(entities)
 
 
 class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
@@ -283,26 +277,6 @@ class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
-        if self.entity_description.meter_kind == "mbus":
-            return DeviceInfo(
-                identifiers={
-                    (
-                        DOMAIN,
-                        f"mbus:{self.coordinator.data.get('gas_equipment_id', self.entry.entry_id)}",
-                    )
-                },
-                via_device=self.coordinator.primary_device_identifier,
-                manufacturer="Meter",
-                model=_mbus_device_type_name(
-                    self.coordinator.data.get("mbus_device_type")
-                ),
-                model_id=_mbus_device_type_code(
-                    self.coordinator.data.get("mbus_device_type")
-                ),
-                name=f"{self.entry.data[CONF_NAME]} M-Bus",
-                serial_number=self.coordinator.data.get("mbus_meter_id"),
-            )
-
         return DeviceInfo(
             identifiers=self.coordinator.device_identifiers,
             manufacturer=self.coordinator.data.get("meter_manufacturer", "Athom"),
@@ -311,6 +285,79 @@ class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
             name=self.entry.data[CONF_NAME],
             serial_number=self.coordinator.data.get("electricity_meter_id"),
             sw_version=self.coordinator.data.get("protocol_family"),
+        )
+
+
+class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
+    """Representation of a delivered-volume/energy sensor for one M-Bus channel."""
+
+    _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(
+        self,
+        coordinator: HomeyP1Coordinator,
+        entry: ConfigEntry,
+        channel: str,
+    ) -> None:
+        """Initialize the M-Bus sensor."""
+        super().__init__(coordinator)
+        self.entry = entry
+        self.channel = channel
+        self._attr_unique_id = f"{entry.entry_id}_mbus_{channel}_delivered"
+        self._attr_translation_key = "gas_delivered"
+
+    @property
+    def _channel_data(self) -> dict:
+        """Return channel-specific data."""
+        return self.coordinator.data.get("mbus_channels", {}).get(self.channel, {})
+
+    @property
+    def name(self) -> str:
+        """Return the entity name."""
+        meter_name = _mbus_device_type_name(self._channel_data.get("device_type"))
+        return f"{meter_name} delivered"
+
+    @property
+    def available(self) -> bool:
+        """Return whether the entity is available."""
+        return self.coordinator.available and self.native_value is not None
+
+    @property
+    def native_value(self):
+        """Return the sensor value."""
+        return self._channel_data.get("delivered")
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Return the channel unit."""
+        unit = self._channel_data.get("unit")
+        if unit == "m3":
+            return UnitOfVolume.CUBIC_METERS
+        return unit
+
+    @property
+    def device_class(self):
+        """Return the best matching device class."""
+        device_type = _normalize_device_type(self._channel_data.get("device_type"))
+        if device_type == 3:
+            return SensorDeviceClass.GAS
+        if self.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR:
+            return SensorDeviceClass.ENERGY
+        return None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        meter_id = self._channel_data.get("equipment_id", f"channel:{self.channel}")
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"mbus:{self.channel}:{meter_id}")},
+            via_device=self.coordinator.primary_device_identifier,
+            manufacturer="Meter",
+            model=_mbus_device_type_name(self._channel_data.get("device_type")),
+            model_id=_mbus_device_type_code(self._channel_data.get("device_type")),
+            name=f"{self.entry.data[CONF_NAME]} M-Bus {self.channel}",
+            serial_number=self._channel_data.get("meter_id"),
         )
 
 

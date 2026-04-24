@@ -37,6 +37,7 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         self.session: ClientSession = async_get_clientsession(hass)
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
+        self._first_update = asyncio.Event()
         self._available = False
         self._unique_id_updated = False
         self.data = {}
@@ -53,10 +54,16 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
     async def async_shutdown(self) -> None:
         """Stop the websocket listener."""
         self._stopped.set()
+        self._first_update.set()
         if self._task:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+
+    async def async_wait_for_initial_data(self, timeout: float = 10.0) -> None:
+        """Wait briefly for the first parsed telegram."""
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self._first_update.wait(), timeout)
 
     async def async_handle_hass_stop(self, event: Event) -> None:
         """Stop the websocket listener during Home Assistant shutdown."""
@@ -123,6 +130,7 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
                             merged = {**self.data, **parsed}
                             await self._async_update_unique_id(merged)
                             self.async_set_updated_data(merged)
+                            self._first_update.set()
                         telegram = ""
                         collecting = False
 

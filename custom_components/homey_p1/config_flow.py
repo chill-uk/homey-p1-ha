@@ -7,6 +7,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.core import callback
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -64,19 +65,16 @@ class HomeyP1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     @staticmethod
+    @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> HomeyP1OptionsFlow:
         """Get the options flow for this handler."""
-        return HomeyP1OptionsFlow(config_entry)
+        return HomeyP1OptionsFlow()
 
 
-class HomeyP1OptionsFlow(config_entries.OptionsFlow):
+class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
     """Handle Homey P1 options."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, str] | None = None

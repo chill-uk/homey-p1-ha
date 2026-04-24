@@ -12,6 +12,11 @@ HEADER_RE = re.compile(r"^/(?P<manufacturer>[A-Za-z]{3})(?P<version>\d)\\(?P<mod
 LINE_RE = re.compile(r"^(?P<obis>[\d-]+:[\d.]+(?:\.\d+)?)\((?P<value>.*)\)$")
 UNIT_RE = re.compile(r"^(?P<value>[-\d.]+)\*(?P<unit>[A-Za-z0-9]+)$")
 GROUP_RE = re.compile(r"\(([^()]*)\)")
+MBUS_DEVICE_TYPE_RE = re.compile(r"^0-(?P<channel>\d+):24\.1\.0\((?P<value>\d+)\)$")
+MBUS_EQUIPMENT_ID_RE = re.compile(r"^0-(?P<channel>\d+):96\.1\.0\((?P<value>[^()]*)\)$")
+MBUS_READING_RE = re.compile(
+    r"^0-(?P<channel>\d+):24\.2\.1\((?P<timestamp>\d{12}[SW])\)\((?P<value>[-\d.]+)\*(?P<unit>[A-Za-z0-9]+)\)$"
+)
 
 OBIS_MAP: dict[str, tuple[str, callable]] = {
     "1-3:0.2.8": ("dsmr_version", str),
@@ -54,6 +59,8 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
     """Parse a DSMR telegram into a flat dictionary."""
     parsed: dict[str, Any] = {}
 
+    mbus_channels: dict[str, dict[str, Any]] = {}
+
     for raw_line in telegram.splitlines():
         line = raw_line.strip()
         if not line:
@@ -72,13 +79,7 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
         if line.startswith("!"):
             continue
 
-        if line.startswith("0-1:24.2.1"):
-            gas_values = _extract_groups(line)
-            if len(gas_values) >= 2:
-                parsed["gas_timestamp"] = gas_values[0]
-                value = _normalize_value(gas_values[1], float)
-                if value is not None:
-                    parsed["gas_delivered"] = value
+        if _parse_mbus_line(line, mbus_channels):
             continue
 
         match = LINE_RE.match(line)
@@ -102,6 +103,21 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
     if gas_equipment_id := parsed.get("gas_equipment_id"):
         parsed["mbus_meter_id"] = _decode_hex_identifier(str(gas_equipment_id))
 
+    if mbus_channels:
+        for channel_data in mbus_channels.values():
+            if equipment_id := channel_data.get("equipment_id"):
+                channel_data["meter_id"] = _decode_hex_identifier(str(equipment_id))
+
+        parsed["mbus_channels"] = mbus_channels
+
+        # Mirror channel 1 into the legacy flat keys for backwards compatibility.
+        if channel_one := mbus_channels.get("1"):
+            parsed["mbus_device_type"] = channel_one.get("device_type")
+            parsed["gas_equipment_id"] = channel_one.get("equipment_id")
+            parsed["mbus_meter_id"] = channel_one.get("meter_id")
+            parsed["gas_timestamp"] = channel_one.get("timestamp")
+            parsed["gas_delivered"] = channel_one.get("delivered")
+
     if not parsed:
         _LOGGER.debug("Received DSMR telegram without known fields")
 
@@ -117,6 +133,29 @@ def _extract_payload(line: str) -> str:
 def _extract_groups(line: str) -> list[str]:
     """Return all parenthesized groups from a telegram line."""
     return GROUP_RE.findall(line)
+
+
+def _parse_mbus_line(line: str, channels: dict[str, dict[str, Any]]) -> bool:
+    """Parse a dynamic M-Bus line into the channel map."""
+    if match := MBUS_DEVICE_TYPE_RE.match(line):
+        channel = match.group("channel")
+        channels.setdefault(channel, {})["device_type"] = int(match.group("value"))
+        return True
+
+    if match := MBUS_EQUIPMENT_ID_RE.match(line):
+        channel = match.group("channel")
+        channels.setdefault(channel, {})["equipment_id"] = match.group("value")
+        return True
+
+    if match := MBUS_READING_RE.match(line):
+        channel = match.group("channel")
+        channel_data = channels.setdefault(channel, {})
+        channel_data["timestamp"] = match.group("timestamp")
+        channel_data["unit"] = match.group("unit")
+        channel_data["delivered"] = float(match.group("value"))
+        return True
+
+    return False
 
 
 def _normalize_value(payload: str, caster: callable) -> Any | None:

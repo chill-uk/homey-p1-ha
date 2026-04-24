@@ -46,9 +46,14 @@ class OptionsFlow:
     """Stub OptionsFlow."""
 
 
+class OptionsFlowWithReload(OptionsFlow):
+    """Stub OptionsFlowWithReload."""
+
+
 fake_config_entries.AbortFlow = AbortFlow
 fake_config_entries.ConfigFlow = ConfigFlow
 fake_config_entries.OptionsFlow = OptionsFlow
+fake_config_entries.OptionsFlowWithReload = OptionsFlowWithReload
 fake_config_entries.ConfigEntry = object
 
 fake_homeassistant = types.ModuleType("homeassistant")
@@ -63,6 +68,7 @@ sys.modules["homeassistant.const"] = fake_const
 
 fake_core = types.ModuleType("homeassistant.core")
 fake_core.HomeAssistant = object
+fake_core.callback = lambda func: func
 sys.modules["homeassistant.core"] = fake_core
 
 fake_flow = types.ModuleType("homeassistant.data_entry_flow")
