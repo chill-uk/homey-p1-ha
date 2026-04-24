@@ -281,8 +281,7 @@ class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
             identifiers=self.coordinator.device_identifiers,
             manufacturer=self.coordinator.data.get("meter_manufacturer", "Homey"),
             model=_electricity_meter_model(self.coordinator.data),
-            model_id="2",
-            name="P1-Meter",
+            name=METER_TYPE_MAP[2],
             serial_number=self.coordinator.data.get("electricity_meter_id"),
         )
 
