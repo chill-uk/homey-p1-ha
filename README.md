@@ -1,4 +1,4 @@
-# Homey P1 for Home Assistant
+# Local Homey P1 for Home Assistant
 
 [![GitHub release](https://img.shields.io/github/release/chill-uk/homey-p1-ha?include_prereleases=&sort=semver&color=blue)](https://github.com/chill-uk/homey-p1-ha/releases/)
 [![issues - homey-p1-ha](https://img.shields.io/github/issues/chill-uk/homey-p1-ha)](https://github.com/chill-uk/homey-p1-ha/issues)

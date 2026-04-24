@@ -352,9 +352,11 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
         return DeviceInfo(
             identifiers={(DOMAIN, f"mbus:{self.channel}:{meter_id}")},
             via_device=self.coordinator.primary_device_identifier,
-            model=_mbus_device_label(self._channel_data.get("device_type")),
-            model_id=_mbus_device_type_code(self._channel_data.get("device_type")),
-            name=f"{self.entry.data[CONF_NAME]} M-Bus {self.channel}",
+            model=_mbus_device_details(
+                self.channel,
+                self._channel_data.get("device_type"),
+            ),
+            name=_mbus_device_title(self._channel_data.get("device_type")),
             serial_number=self._channel_data.get("meter_id"),
         )
 
@@ -371,6 +373,19 @@ def _mbus_device_label(device_type: object) -> str:
     if code:
         return f"{name} (ID:{code})"
     return name
+
+
+def _mbus_device_title(device_type: object) -> str:
+    """Return the device name shown in Home Assistant."""
+    return _mbus_device_type_name(device_type).title()
+
+
+def _mbus_device_details(channel: str, device_type: object) -> str:
+    """Return the detail text shown under the M-Bus device name."""
+    code = _mbus_device_type_code(device_type)
+    if code:
+        return f"M-Bus {channel} / ID:{code}"
+    return f"M-Bus {channel}"
 
 
 def _mbus_device_type_code(device_type: object) -> str | None:
