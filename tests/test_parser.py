@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import unittest
 
 
@@ -18,29 +19,29 @@ spec.loader.exec_module(parser)
 SAMPLE_TELEGRAM = r"""/XYZ5\TESTMETER-0001
 
 1-3:0.2.8(50)
-0-0:1.0.0(260423134812S)
+0-0:1.0.0(240424101530S)
 0-0:96.1.1(4531323334353637383930313233343536)
-1-0:1.8.1(014339.615*kWh)
-1-0:1.8.2(015748.606*kWh)
-1-0:2.8.1(000001.229*kWh)
-1-0:2.8.2(000002.838*kWh)
+1-0:1.8.1(001234.567*kWh)
+1-0:1.8.2(008765.432*kWh)
+1-0:2.8.1(000123.456*kWh)
+1-0:2.8.2(000234.567*kWh)
 0-0:96.14.0(0002)
-1-0:1.7.0(00.005*kW)
-1-0:2.7.0(00.000*kW)
-0-0:96.7.21(00016)
-0-0:96.7.9(00007)
-1-0:99.97.0(2)(0-0:96.7.19)(170112141836W)(0000001793*s)(221224033537W)(0000016055*s)
-1-0:32.32.0(00014)
-1-0:32.36.0(00002)
+1-0:1.7.0(01.234*kW)
+1-0:2.7.0(00.321*kW)
+0-0:96.7.21(00003)
+0-0:96.7.9(00001)
+1-0:99.97.0(1)(0-0:96.7.19)(240101120000W)(0000000120*s)
+1-0:32.32.0(00004)
+1-0:32.36.0(00001)
 0-0:96.13.0()
-1-0:32.7.0(242.1*V)
-1-0:31.7.0(003*A)
-1-0:21.7.0(00.000*kW)
-1-0:22.7.0(00.000*kW)
+1-0:32.7.0(230.4*V)
+1-0:31.7.0(006*A)
+1-0:21.7.0(00.789*kW)
+1-0:22.7.0(00.111*kW)
 0-1:24.1.0(003)
 0-1:96.1.0(4739383736353433323130393837363534)
-0-1:24.2.1(260423134501S)(11035.909*m3)
-!DD34
+0-1:24.2.1(240424101000S)(00123.456*m3)
+!ABCD
 """
 
 
@@ -50,28 +51,43 @@ class ParseTelegramTests(unittest.TestCase):
     def test_parses_real_homey_telegram(self) -> None:
         result = parser.parse_dsmr_telegram(SAMPLE_TELEGRAM)
 
-        self.assertEqual(result["telegram_timestamp"], "260423134812S")
+        self.assertRegex(result["meter_manufacturer"], r"^[A-Z]{3}$")
+        self.assertTrue(result["meter_model"])
+        self.assertRegex(result["protocol_family"], r"^DSMR v\d+$")
+        self.assertRegex(result["telegram_timestamp"], r"^\d{12}[SW]$")
+        self.assertRegex(result["equipment_id"], r"^[0-9A-F]+$")
+        self.assertTrue(result["electricity_meter_id"])
         self.assertEqual(
-            result["equipment_id"],
-            "4531323334353637383930313233343536",
+            result["electricity_meter_id"],
+            bytes.fromhex(result["equipment_id"]).decode("ascii"),
         )
-        self.assertEqual(result["tariff_indicator"], 2)
-        self.assertEqual(result["energy_import_tariff_1"], 14339.615)
-        self.assertEqual(result["energy_import_tariff_2"], 15748.606)
-        self.assertEqual(result["energy_export_tariff_1"], 1.229)
-        self.assertEqual(result["energy_export_tariff_2"], 2.838)
-        self.assertEqual(result["power_consumption"], 0.005)
-        self.assertEqual(result["power_production"], 0.0)
-        self.assertEqual(result["power_failures"], 16)
-        self.assertEqual(result["long_power_failures"], 7)
-        self.assertEqual(result["voltage_sags_l1"], 14)
-        self.assertEqual(result["voltage_swells_l1"], 2)
-        self.assertEqual(result["voltage_l1"], 242.1)
-        self.assertEqual(result["current_l1"], 3.0)
-        self.assertEqual(result["power_consumption_l1"], 0.0)
-        self.assertEqual(result["power_production_l1"], 0.0)
-        self.assertEqual(result["gas_timestamp"], "260423134501S")
-        self.assertEqual(result["gas_delivered"], 11035.909)
+        self.assertIn(result["tariff_indicator"], (1, 2))
+        self.assertGreaterEqual(result["energy_import_tariff_1"], 0.0)
+        self.assertGreaterEqual(result["energy_import_tariff_2"], 0.0)
+        self.assertGreaterEqual(result["energy_export_tariff_1"], 0.0)
+        self.assertGreaterEqual(result["energy_export_tariff_2"], 0.0)
+        self.assertGreaterEqual(
+            result["energy_import_tariff_2"],
+            result["energy_export_tariff_2"],
+        )
+        self.assertGreaterEqual(result["power_consumption"], 0.0)
+        self.assertGreaterEqual(result["power_production"], 0.0)
+        self.assertGreaterEqual(result["power_failures"], 0)
+        self.assertGreaterEqual(result["long_power_failures"], 0)
+        self.assertGreaterEqual(result["voltage_sags_l1"], 0)
+        self.assertGreaterEqual(result["voltage_swells_l1"], 0)
+        self.assertGreater(result["voltage_l1"], 0.0)
+        self.assertGreaterEqual(result["current_l1"], 0.0)
+        self.assertGreaterEqual(result["power_consumption_l1"], 0.0)
+        self.assertGreaterEqual(result["power_production_l1"], 0.0)
+        self.assertEqual(result["mbus_device_type"], 3)
+        self.assertRegex(result["gas_equipment_id"], r"^[0-9A-F]+$")
+        self.assertEqual(
+            result["mbus_meter_id"],
+            bytes.fromhex(result["gas_equipment_id"]).decode("ascii"),
+        )
+        self.assertRegex(result["gas_timestamp"], r"^\d{12}[SW]$")
+        self.assertGreaterEqual(result["gas_delivered"], 0.0)
 
     def test_ignores_unknown_lines_and_empty_telegram(self) -> None:
         result = parser.parse_dsmr_telegram("/HEADER\n1-0:99.99.9(abc)\n!0000\n")

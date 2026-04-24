@@ -160,3 +160,8 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         if equipment_id := self.data.get("equipment_id"):
             identifiers.add((self.entry.domain, f"meter:{equipment_id}"))
         return identifiers
+
+    @property
+    def primary_device_identifier(self) -> tuple[str, str]:
+        """Return the stable parent device identifier."""
+        return (self.entry.domain, f"host:{self.host.lower()}")

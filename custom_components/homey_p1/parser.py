@@ -8,6 +8,7 @@ from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
+HEADER_RE = re.compile(r"^/(?P<manufacturer>[A-Za-z]{3})(?P<version>\d)\\(?P<model>.+)$")
 LINE_RE = re.compile(r"^(?P<obis>[\d-]+:[\d.]+(?:\.\d+)?)\((?P<value>.*)\)$")
 UNIT_RE = re.compile(r"^(?P<value>[-\d.]+)\*(?P<unit>[A-Za-z0-9]+)$")
 GROUP_RE = re.compile(r"\(([^()]*)\)")
@@ -44,6 +45,7 @@ OBIS_MAP: dict[str, tuple[str, callable]] = {
     "1-0:72.36.0": ("voltage_swells_l3", int),
     "0-0:96.7.21": ("power_failures", int),
     "0-0:96.7.9": ("long_power_failures", int),
+    "0-1:24.1.0": ("mbus_device_type", int),
     "0-1:96.1.0": ("gas_equipment_id", str),
 }
 
@@ -54,7 +56,20 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
 
     for raw_line in telegram.splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("/") or line.startswith("!"):
+        if not line:
+            continue
+
+        if line.startswith("/"):
+            header_match = HEADER_RE.match(line)
+            if header_match:
+                parsed["meter_manufacturer"] = header_match.group("manufacturer")
+                parsed["meter_model"] = header_match.group("model")
+                parsed["protocol_family"] = (
+                    f"DSMR v{header_match.group('version')}"
+                )
+            continue
+
+        if line.startswith("!"):
             continue
 
         if line.startswith("0-1:24.2.1"):
@@ -80,6 +95,12 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
         value = _normalize_value(payload, caster)
         if value is not None:
             parsed[key] = value
+
+    if equipment_id := parsed.get("equipment_id"):
+        parsed["electricity_meter_id"] = _decode_hex_identifier(str(equipment_id))
+
+    if gas_equipment_id := parsed.get("gas_equipment_id"):
+        parsed["mbus_meter_id"] = _decode_hex_identifier(str(gas_equipment_id))
 
     if not parsed:
         _LOGGER.debug("Received DSMR telegram without known fields")
@@ -108,3 +129,16 @@ def _normalize_value(payload: str, caster: callable) -> Any | None:
     except (TypeError, ValueError):
         _LOGGER.debug("Unable to parse DSMR value %s with %s", payload, caster)
         return None
+
+
+def _decode_hex_identifier(value: str) -> str:
+    """Decode a hex-encoded meter identifier to ASCII when possible."""
+    try:
+        decoded = bytes.fromhex(value).decode("ascii")
+    except (ValueError, UnicodeDecodeError):
+        return value
+
+    if all(32 <= ord(char) <= 126 for char in decoded):
+        return decoded
+
+    return value

@@ -33,6 +33,7 @@ class HomeyP1SensorDescription(SensorEntityDescription):
     """Describe a Homey P1 sensor."""
 
     enabled_by_default: bool = True
+    meter_kind: str = "electricity"
 
 
 SENSORS: tuple[HomeyP1SensorDescription, ...] = (
@@ -132,6 +133,7 @@ SENSORS: tuple[HomeyP1SensorDescription, ...] = (
         native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
         device_class=SensorDeviceClass.GAS,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        meter_kind="mbus",
     ),
     HomeyP1SensorDescription(
         key="voltage_l1",
@@ -281,11 +283,69 @@ class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
+        if self.entity_description.meter_kind == "mbus":
+            return DeviceInfo(
+                identifiers={
+                    (
+                        DOMAIN,
+                        f"mbus:{self.coordinator.data.get('gas_equipment_id', self.entry.entry_id)}",
+                    )
+                },
+                via_device=self.coordinator.primary_device_identifier,
+                manufacturer="Meter",
+                model=_mbus_device_type_name(
+                    self.coordinator.data.get("mbus_device_type")
+                ),
+                model_id=_mbus_device_type_code(
+                    self.coordinator.data.get("mbus_device_type")
+                ),
+                name=f"{self.entry.data[CONF_NAME]} M-Bus",
+                serial_number=self.coordinator.data.get("mbus_meter_id"),
+            )
+
         return DeviceInfo(
             identifiers=self.coordinator.device_identifiers,
-            manufacturer="Athom",
-            model="Homey Energy Dongle",
+            manufacturer=self.coordinator.data.get("meter_manufacturer", "Athom"),
+            model=self.coordinator.data.get("meter_model", "Electricity meter"),
+            model_id="2",
             name=self.entry.data[CONF_NAME],
-            serial_number=self.coordinator.data.get("equipment_id"),
-            sw_version=self.coordinator.data.get("dsmr_version"),
+            serial_number=self.coordinator.data.get("electricity_meter_id"),
+            sw_version=self.coordinator.data.get("protocol_family"),
         )
+
+
+def _mbus_device_type_name(device_type: object) -> str:
+    """Return a readable M-Bus device type name."""
+    return METER_TYPE_MAP.get(_normalize_device_type(device_type), "M-Bus meter")
+
+
+def _mbus_device_type_code(device_type: object) -> str | None:
+    """Return the three-digit device type code for display."""
+    normalized = _normalize_device_type(device_type)
+    if normalized is None:
+        return None
+    return f"{normalized:03d}"
+
+
+def _normalize_device_type(device_type: object) -> int | None:
+    """Convert a device type to an integer when possible."""
+    if isinstance(device_type, int):
+        return device_type
+
+    if isinstance(device_type, str):
+        try:
+            return int(device_type, 10)
+        except ValueError:
+            return None
+
+    return None
+
+
+METER_TYPE_MAP: dict[int, str] = {
+    2: "Electricity meter",
+    3: "Gas meter",
+    4: "Heat meter",
+    5: "Cooling meter",
+    6: "Hot water meter",
+    7: "Water meter",
+}
