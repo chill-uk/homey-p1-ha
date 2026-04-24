@@ -279,12 +279,11 @@ class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers=self.coordinator.device_identifiers,
-            manufacturer=self.coordinator.data.get("meter_manufacturer", "Athom"),
-            model=self.coordinator.data.get("meter_model", "Electricity meter"),
+            manufacturer=self.coordinator.data.get("meter_manufacturer", "Homey"),
+            model=_electricity_meter_model(self.coordinator.data),
             model_id="2",
-            name=self.entry.data[CONF_NAME],
+            name="P1-Meter",
             serial_number=self.coordinator.data.get("electricity_meter_id"),
-            sw_version=self.coordinator.data.get("protocol_family"),
         )
 
 
@@ -353,8 +352,7 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
         return DeviceInfo(
             identifiers={(DOMAIN, f"mbus:{self.channel}:{meter_id}")},
             via_device=self.coordinator.primary_device_identifier,
-            manufacturer="Meter",
-            model=_mbus_device_type_name(self._channel_data.get("device_type")),
+            model=_mbus_device_label(self._channel_data.get("device_type")),
             model_id=_mbus_device_type_code(self._channel_data.get("device_type")),
             name=f"{self.entry.data[CONF_NAME]} M-Bus {self.channel}",
             serial_number=self._channel_data.get("meter_id"),
@@ -364,6 +362,15 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
 def _mbus_device_type_name(device_type: object) -> str:
     """Return a readable M-Bus device type name."""
     return METER_TYPE_MAP.get(_normalize_device_type(device_type), "M-Bus meter")
+
+
+def _mbus_device_label(device_type: object) -> str:
+    """Return the label shown for an M-Bus device."""
+    name = _mbus_device_type_name(device_type)
+    code = _mbus_device_type_code(device_type)
+    if code:
+        return f"{name} (ID:{code})"
+    return name
 
 
 def _mbus_device_type_code(device_type: object) -> str | None:
@@ -396,3 +403,17 @@ METER_TYPE_MAP: dict[int, str] = {
     6: "Hot water meter",
     7: "Water meter",
 }
+
+
+def _electricity_meter_model(data: dict) -> str:
+    """Build the electricity meter model label shown in Home Assistant."""
+    meter_model = data.get("meter_model")
+    protocol_family = data.get("protocol_family")
+
+    if meter_model and protocol_family:
+        return f"{meter_model} / {protocol_family}"
+    if meter_model:
+        return str(meter_model)
+    if protocol_family:
+        return str(protocol_family)
+    return "Electricity meter"
