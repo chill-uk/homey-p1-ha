@@ -33,6 +33,7 @@ class HomeyP1SensorDescription(SensorEntityDescription):
     """Describe a Homey P1 sensor."""
 
     enabled_by_default: bool = True
+    value_scale: float = 1.0
 
 
 SENSORS: tuple[HomeyP1SensorDescription, ...] = (
@@ -67,64 +68,72 @@ SENSORS: tuple[HomeyP1SensorDescription, ...] = (
     HomeyP1SensorDescription(
         key="power_consumption",
         translation_key="power_consumption",
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
+        value_scale=1000.0,
     ),
     HomeyP1SensorDescription(
         key="power_production",
         translation_key="power_production",
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
+        value_scale=1000.0,
     ),
     HomeyP1SensorDescription(
         key="power_consumption_l1",
         translation_key="power_consumption_l1",
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         enabled_by_default=False,
+        value_scale=1000.0,
     ),
     HomeyP1SensorDescription(
         key="power_consumption_l2",
         translation_key="power_consumption_l2",
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         enabled_by_default=False,
+        value_scale=1000.0,
     ),
     HomeyP1SensorDescription(
         key="power_consumption_l3",
         translation_key="power_consumption_l3",
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         enabled_by_default=False,
+        value_scale=1000.0,
     ),
     HomeyP1SensorDescription(
         key="power_production_l1",
         translation_key="power_production_l1",
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         enabled_by_default=False,
+        value_scale=1000.0,
     ),
     HomeyP1SensorDescription(
         key="power_production_l2",
         translation_key="power_production_l2",
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         enabled_by_default=False,
+        value_scale=1000.0,
     ),
     HomeyP1SensorDescription(
         key="power_production_l3",
         translation_key="power_production_l3",
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         enabled_by_default=False,
+        value_scale=1000.0,
     ),
     HomeyP1SensorDescription(
         key="voltage_l1",
@@ -272,7 +281,10 @@ class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
     @property
     def native_value(self):
         """Return the sensor value."""
-        return self.coordinator.data.get(self.entity_description.key)
+        value = self.coordinator.data.get(self.entity_description.key)
+        if isinstance(value, (int, float)):
+            return value * self.entity_description.value_scale
+        return value
 
     @property
     def device_info(self) -> DeviceInfo:

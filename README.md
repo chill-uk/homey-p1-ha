@@ -26,8 +26,6 @@ The quickest way to install this integration is via [HACS](https://github.com/ha
 4. In Home Assistant, go to `Settings -> Devices & Services`.
 5. Add the `Homey P1` integration.
 
-For versioned installs and upgrades in HACS, create GitHub releases such as `v0.1.0`. If there are no releases yet, HACS will install from the default branch instead.
-
 ### Manual installation
 
 1. Copy `custom_components/homey_p1` into your Home Assistant config directory.
