@@ -12,6 +12,11 @@ This repository contains a custom Home Assistant integration that connects to a 
 Parts of the implementation were inspired by the `homey-energy-dongle-ws.js` example from
 [athombv/node-dsmr-parser](https://github.com/athombv/node-dsmr-parser/blob/master/examples/homey-energy-dongle-ws.js).
 
+## Upgrade note: v0.3.4 to v0.3.5
+
+Upgrading from `v0.3.4` to `v0.3.5` changes the reported power values from `kW` to `W`.
+If your power sensors still show `kW` after upgrading, you may need to delete and re-add the integration.
+
 ## Installation
 
 ### HACS installation
