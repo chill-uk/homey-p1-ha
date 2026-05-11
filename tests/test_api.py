@@ -80,6 +80,18 @@ class FakeSession:
 class ValidateConnectionTests(unittest.IsolatedAsyncioTestCase):
     """Test Homey websocket validation."""
 
+    def test_classifies_connection_limit_close_reason(self) -> None:
+        error = api.classify_close_reason("Connection limit reached")
+        self.assertIsInstance(error, api.ConnectionLimitError)
+
+    def test_classifies_local_api_disabled_close_reason(self) -> None:
+        error = api.classify_close_reason("Local API disabled")
+        self.assertIsInstance(error, api.LocalAPIDisabledError)
+
+    def test_classifies_unknown_close_reason(self) -> None:
+        error = api.classify_close_reason("closed")
+        self.assertIsInstance(error, api.CannotConnectError)
+
     async def test_accepts_text_message(self) -> None:
         session = FakeSession(
             FakeWebSocket(SimpleNamespace(type=_WSMsgType.TEXT, extra="", data="ok"))

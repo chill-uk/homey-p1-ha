@@ -21,6 +21,18 @@ class LocalAPIDisabledError(Exception):
     """Raised when the Local API is disabled on the dongle."""
 
 
+def classify_close_reason(reason: str) -> Exception:
+    """Map a websocket close reason to a typed exception."""
+    reason_text = str(reason or "")
+    reason_lower = reason_text.lower()
+
+    if "connection limit reached" in reason_lower:
+        return ConnectionLimitError(reason_text)
+    if "local api disabled" in reason_lower:
+        return LocalAPIDisabledError(reason_text)
+    return CannotConnectError(reason_text or "websocket closed")
+
+
 async def async_validate_connection(session: ClientSession, host: str) -> None:
     """Validate that the Homey websocket is reachable."""
     url = f"ws://{host}:{DEFAULT_PORT}{WS_PATH}"
@@ -38,13 +50,7 @@ async def async_validate_connection(session: ClientSession, host: str) -> None:
                 return
 
             if message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR):
-                reason = str(message.extra or "")
-                reason_lower = reason.lower()
-                if "connection limit reached" in reason_lower:
-                    raise ConnectionLimitError(reason)
-                if "local api disabled" in reason_lower:
-                    raise LocalAPIDisabledError(reason)
-                raise CannotConnectError(reason or "websocket closed")
+                raise classify_close_reason(str(message.extra or ""))
     except LocalAPIDisabledError:
         raise
     except ConnectionLimitError:

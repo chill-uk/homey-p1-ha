@@ -15,6 +15,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .api import (
+    CannotConnectError,
+    ConnectionLimitError,
+    LocalAPIDisabledError,
+    classify_close_reason,
+)
 from .const import DEFAULT_PORT, RECONNECT_DELAY_SECONDS, WS_PATH
 from .parser import parse_dsmr_telegram
 
@@ -76,6 +82,17 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
                 await self._listen()
             except asyncio.CancelledError:
                 raise
+            except ConnectionLimitError as err:
+                _LOGGER.warning(
+                    "Homey P1 websocket rejected the connection: %s. "
+                    "This can happen after an unclean shutdown if the dongle "
+                    "still thinks the old client is connected.",
+                    err,
+                )
+            except LocalAPIDisabledError as err:
+                _LOGGER.warning("Homey P1 Local API is disabled: %s", err)
+            except CannotConnectError as err:
+                _LOGGER.warning("Homey P1 websocket closed: %s", err)
             except (ClientError, TimeoutError, ValueError, WSMessageTypeError) as err:
                 _LOGGER.warning("Homey P1 connection error: %s", err)
             except Exception:  # noqa: BLE001
@@ -107,7 +124,7 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
                 elif message.type == WSMsgType.BINARY:
                     buffer += message.data.decode(errors="ignore")
                 elif message.type in (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSED):
-                    break
+                    raise classify_close_reason(str(message.extra or ""))
                 else:
                     continue
 
