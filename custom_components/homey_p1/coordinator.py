@@ -66,10 +66,12 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
 
-    async def async_wait_for_initial_data(self, timeout: float = 10.0) -> None:
+    async def async_wait_for_initial_data(self, timeout: float = 10.0) -> bool:
         """Wait briefly for the first parsed telegram."""
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self._first_update.wait(), timeout)
+            return True
+        return False
 
     async def async_handle_hass_stop(self, event: Event) -> None:
         """Stop the websocket listener during Home Assistant shutdown."""
