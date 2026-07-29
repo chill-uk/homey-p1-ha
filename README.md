@@ -9,8 +9,11 @@
 
 This repository contains a custom Home Assistant integration that connects to a Homey Energy Dongle over its local WebSocket API and exposes common DSMR readings as sensors.
 
-Parts of the implementation were inspired by the `homey-energy-dongle-ws.js` example from
-[athombv/node-dsmr-parser](https://github.com/athombv/node-dsmr-parser/blob/master/examples/homey-energy-dongle-ws.js).
+The WebSocket connection behavior is based on Athom's
+[Homey Energy Dongle Local API documentation](https://support.homey.app/hc/en-us/articles/18985951863452-Homey-Energy-Dongle-Local-API)
+and its [`homey-energy-dongle-ws.js` reference example](https://github.com/athombv/node-dsmr-parser/blob/master/examples/homey-energy-dongle-ws.js).
+This integration contains an independent Python implementation and does not
+include or depend on `node-dsmr-parser`.
 
 ## Upgrade note: v0.3.4 to v0.3.5
 
