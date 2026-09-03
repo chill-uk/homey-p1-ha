@@ -6,6 +6,7 @@
 [![GH-last-commit](https://img.shields.io/github/last-commit/chill-uk/homey-p1-ha?style=flat-square)](https://github.com/chill-uk/homey-p1-ha/commits/main)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![Validation](https://github.com/chill-uk/homey-p1-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/chill-uk/homey-p1-ha/actions/workflows/validate.yml)
+![GitHub Downloads](https://img.shields.io/github/downloads/chill-uk/homey-p1-ha/total)
 
 This repository contains a custom Home Assistant integration that connects to a Homey Energy Dongle over its local WebSocket API and exposes common DSMR readings as sensors.
 
