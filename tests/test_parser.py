@@ -128,3 +128,31 @@ class ParseTelegramTests(unittest.TestCase):
         self.assertEqual(result["meter_model"], "LGBBFG10")
         self.assertEqual(result["dsmr_version"], "4.2")
         self.assertEqual(result["protocol_family"], "DSMR v4.2")
+
+    def test_buffers_telegram_split_across_websocket_messages(self) -> None:
+        telegram_buffer = parser.DSMRTelegramBuffer()
+
+        self.assertEqual(telegram_buffer.feed("noise\n/ISk5\\MT"), [])
+        self.assertEqual(telegram_buffer.feed("382\n1-3:0.2.8(50)\n"), [])
+        telegrams = telegram_buffer.feed("!ABCD\n")
+
+        self.assertEqual(len(telegrams), 1)
+        self.assertEqual(
+            parser.parse_dsmr_telegram(telegrams[0])["dsmr_version"],
+            "5.0",
+        )
+
+    def test_buffers_multiple_telegrams_in_one_websocket_message(self) -> None:
+        telegram_buffer = parser.DSMRTelegramBuffer()
+        chunk = (
+            "/ISk5\\MT382\n1-3:0.2.8(40)\n!AAAA\n"
+            "/XMX5LGBBFG10\n1-3:0.2.8(42)\n!BBBB\n"
+        )
+
+        telegrams = telegram_buffer.feed(chunk)
+
+        self.assertEqual(len(telegrams), 2)
+        self.assertEqual(
+            [parser.parse_dsmr_telegram(item)["dsmr_version"] for item in telegrams],
+            ["4.0", "4.2"],
+        )

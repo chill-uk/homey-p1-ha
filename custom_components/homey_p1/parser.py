@@ -25,6 +25,41 @@ MBUS_READING_RE = re.compile(
 
 ValueCaster = Callable[[str], Any]
 
+
+class DSMRTelegramBuffer:
+    """Collect complete DSMR telegrams from websocket message chunks."""
+
+    def __init__(self) -> None:
+        """Initialize an empty telegram buffer."""
+        self._buffer = ""
+        self._telegram = ""
+        self._collecting = False
+
+    def feed(self, chunk: str) -> list[str]:
+        """Add a websocket chunk and return any complete telegrams."""
+        self._buffer += chunk
+        telegrams: list[str] = []
+
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            line = line.rstrip("\r")
+
+            if line.startswith("/"):
+                self._telegram = f"{line}\n"
+                self._collecting = True
+                continue
+
+            if not self._collecting:
+                continue
+
+            self._telegram += f"{line}\n"
+            if line.startswith("!"):
+                telegrams.append(self._telegram)
+                self._telegram = ""
+                self._collecting = False
+
+        return telegrams
+
 OBIS_MAP: dict[str, tuple[str, ValueCaster]] = {
     "1-3:0.2.8": ("dsmr_version", str),
     "0-0:96.1.0": ("equipment_id", str),

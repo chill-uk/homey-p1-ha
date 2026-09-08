@@ -18,7 +18,7 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfVolume,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -249,9 +249,29 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [
         HomeyP1Sensor(coordinator, entry, description) for description in SENSORS
     ]
-    for channel in sorted(coordinator.data.get("mbus_channels", {}), key=int):
-        entities.append(HomeyP1MBusDeliveredSensor(coordinator, entry, channel))
     async_add_entities(entities)
+
+    known_mbus_channels: set[str] = set()
+
+    @callback
+    def async_discover_mbus_channels() -> None:
+        """Add entities for M-Bus channels discovered after setup."""
+        channels = coordinator.data.get("mbus_channels", {})
+        if not isinstance(channels, dict):
+            return
+
+        new_channels = set(channels) - known_mbus_channels
+        if not new_channels:
+            return
+
+        known_mbus_channels.update(new_channels)
+        async_add_entities(
+            HomeyP1MBusDeliveredSensor(coordinator, entry, channel)
+            for channel in sorted(new_channels, key=_mbus_channel_sort_key)
+        )
+
+    async_discover_mbus_channels()
+    entry.async_on_unload(coordinator.async_add_listener(async_discover_mbus_channels))
 
 
 class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):
@@ -379,6 +399,13 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
 def _mbus_device_type_name(device_type: object) -> str:
     """Return a readable M-Bus device type name."""
     return METER_TYPE_MAP.get(normalize_device_type(device_type), "M-Bus meter")
+
+
+def _mbus_channel_sort_key(channel: str) -> tuple[int, int | str]:
+    """Sort numeric M-Bus channels before unexpected channel labels."""
+    if channel.isdigit():
+        return (0, int(channel))
+    return (1, channel)
 
 
 def _mbus_device_label(device_type: object) -> str:

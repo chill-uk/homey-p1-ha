@@ -7,11 +7,9 @@ import contextlib
 import logging
 
 from aiohttp import ClientError, ClientSession, WSMessageTypeError, WSMsgType
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME
-from homeassistant.core import Event
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -21,8 +19,15 @@ from .api import (
     LocalAPIDisabledError,
     classify_close_reason,
 )
-from .const import DEFAULT_PORT, RECONNECT_DELAY_SECONDS, WS_PATH
-from .parser import parse_dsmr_telegram
+from .const import (
+    CONNECT_TIMEOUT_SECONDS,
+    DEFAULT_PORT,
+    MAX_RECONNECT_DELAY_SECONDS,
+    RECONNECT_DELAY_SECONDS,
+    TELEGRAM_TIMEOUT_SECONDS,
+    WS_PATH,
+)
+from .parser import DSMRTelegramBuffer, parse_dsmr_telegram
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +50,7 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         self._stopped = asyncio.Event()
         self._first_update = asyncio.Event()
         self._available = False
+        self._reconnect_delay = RECONNECT_DELAY_SECONDS
         self._unique_id_updated = False
         self.data = {}
 
@@ -97,61 +103,75 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
                 _LOGGER.warning("Homey P1 websocket closed: %s", err)
             except (ClientError, TimeoutError, ValueError, WSMessageTypeError) as err:
                 _LOGGER.warning("Homey P1 connection error: %s", err)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 _LOGGER.exception("Unexpected Homey P1 error")
 
             self._set_available(False)
             if self._stopped.is_set():
                 break
-            await asyncio.sleep(RECONNECT_DELAY_SECONDS)
+            delay = self._reconnect_delay
+            _LOGGER.info("Retrying Homey P1 connection in %s seconds", delay)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._stopped.wait(), delay)
+            self._reconnect_delay = min(
+                delay * 2,
+                MAX_RECONNECT_DELAY_SECONDS,
+            )
 
     async def _listen(self) -> None:
         """Listen for telegrams on the Homey websocket."""
-        buffer = ""
-        telegram = ""
-        collecting = False
+        telegram_buffer = DSMRTelegramBuffer()
 
         _LOGGER.info("Connecting to Homey P1 websocket at %s", self.url)
-        async with self.session.ws_connect(
-            self.url,
-            heartbeat=30,
-            autoping=True,
-        ) as websocket:
-            self._set_available(True)
+        websocket = await asyncio.wait_for(
+            self.session.ws_connect(
+                self.url,
+                heartbeat=30,
+                autoping=True,
+            ),
+            CONNECT_TIMEOUT_SECONDS,
+        )
+        async with websocket:
             _LOGGER.info("Connected to Homey P1 websocket")
+            loop = asyncio.get_running_loop()
+            telegram_deadline = loop.time() + TELEGRAM_TIMEOUT_SECONDS
 
-            async for message in websocket:
+            while not self._stopped.is_set():
+                remaining = telegram_deadline - loop.time()
+                if remaining <= 0:
+                    raise CannotConnectError(
+                        f"no complete DSMR telegram received for "
+                        f"{TELEGRAM_TIMEOUT_SECONDS} seconds"
+                    )
+
+                try:
+                    message = await websocket.receive(timeout=remaining)
+                except (TimeoutError, asyncio.TimeoutError) as err:
+                    raise CannotConnectError(
+                        f"no complete DSMR telegram received for "
+                        f"{TELEGRAM_TIMEOUT_SECONDS} seconds"
+                    ) from err
+
                 if message.type == WSMsgType.TEXT:
-                    buffer += message.data
+                    chunk = message.data
                 elif message.type == WSMsgType.BINARY:
-                    buffer += message.data.decode(errors="ignore")
+                    chunk = message.data.decode(errors="ignore")
                 elif message.type in (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSED):
                     raise classify_close_reason(str(message.extra or ""))
                 else:
                     continue
 
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
-                    line = line.rstrip("\r")
-
-                    if line.startswith("/"):
-                        telegram = f"{line}\n"
-                        collecting = True
+                for telegram in telegram_buffer.feed(chunk):
+                    parsed = parse_dsmr_telegram(telegram)
+                    if not parsed:
                         continue
 
-                    if not collecting:
-                        continue
-
-                    telegram += f"{line}\n"
-                    if line.startswith("!"):
-                        parsed = parse_dsmr_telegram(telegram)
-                        if parsed:
-                            merged = {**self.data, **parsed}
-                            await self._async_update_unique_id(merged)
-                            self.async_set_updated_data(merged)
-                            self._first_update.set()
-                        telegram = ""
-                        collecting = False
+                    await self._async_update_unique_id(parsed)
+                    self.async_set_updated_data(parsed)
+                    self._first_update.set()
+                    self._reconnect_delay = RECONNECT_DELAY_SECONDS
+                    telegram_deadline = loop.time() + TELEGRAM_TIMEOUT_SECONDS
+                    self._set_available(True)
 
     def _set_available(self, available: bool) -> None:
         """Update availability and notify listeners."""
