@@ -12,7 +12,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    CONF_NAME,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -26,6 +25,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import HomeyP1Coordinator
+from .mbus import classify_mbus_measurement, normalize_device_type
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -315,7 +315,6 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
         self.entry = entry
         self.channel = channel
         self._attr_unique_id = f"{entry.entry_id}_mbus_{channel}_delivered"
-        self._attr_translation_key = "gas_delivered"
 
     @property
     def _channel_data(self) -> dict:
@@ -349,11 +348,16 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
     @property
     def device_class(self):
         """Return the best matching device class."""
-        device_type = _normalize_device_type(self._channel_data.get("device_type"))
-        if device_type == 3:
+        measurement_kind = classify_mbus_measurement(
+            self._channel_data.get("device_type"),
+            self._channel_data.get("unit"),
+        )
+        if measurement_kind == "gas":
             return SensorDeviceClass.GAS
-        if self.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR:
+        if measurement_kind == "energy":
             return SensorDeviceClass.ENERGY
+        if measurement_kind == "water":
+            return SensorDeviceClass.WATER
         return None
 
     @property
@@ -374,7 +378,7 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
 
 def _mbus_device_type_name(device_type: object) -> str:
     """Return a readable M-Bus device type name."""
-    return METER_TYPE_MAP.get(_normalize_device_type(device_type), "M-Bus meter")
+    return METER_TYPE_MAP.get(normalize_device_type(device_type), "M-Bus meter")
 
 
 def _mbus_device_label(device_type: object) -> str:
@@ -401,24 +405,10 @@ def _mbus_device_details(channel: str, device_type: object) -> str:
 
 def _mbus_device_type_code(device_type: object) -> str | None:
     """Return the three-digit device type code for display."""
-    normalized = _normalize_device_type(device_type)
+    normalized = normalize_device_type(device_type)
     if normalized is None:
         return None
     return f"{normalized:03d}"
-
-
-def _normalize_device_type(device_type: object) -> int | None:
-    """Convert a device type to an integer when possible."""
-    if isinstance(device_type, int):
-        return device_type
-
-    if isinstance(device_type, str):
-        try:
-            return int(device_type, 10)
-        except ValueError:
-            return None
-
-    return None
 
 
 METER_TYPE_MAP: dict[int, str] = {

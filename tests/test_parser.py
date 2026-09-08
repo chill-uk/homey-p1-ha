@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
-import re
 import unittest
-
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PARSER_PATH = REPO_ROOT / "custom_components" / "homey_p1" / "parser.py"
+FIXTURES_PATH = REPO_ROOT / "tests" / "fixtures"
+
+# The DSMR 4.0 ISk and 4.2 XMX header/version combinations are based on
+# Athom's node-dsmr-parser fixtures, which cover telegrams seen in practice.
 
 spec = importlib.util.spec_from_file_location("homey_p1_parser", PARSER_PATH)
 parser = importlib.util.module_from_spec(spec)
@@ -56,7 +58,8 @@ class ParseTelegramTests(unittest.TestCase):
 
         self.assertRegex(result["meter_manufacturer"], r"^[A-Z]{3}$")
         self.assertTrue(result["meter_model"])
-        self.assertRegex(result["protocol_family"], r"^DSMR v\d+$")
+        self.assertEqual(result["dsmr_version"], "5.0")
+        self.assertEqual(result["protocol_family"], "DSMR v5.0")
         self.assertRegex(result["telegram_timestamp"], r"^\d{12}[SW]$")
         self.assertRegex(result["equipment_id"], r"^[0-9A-F]+$")
         self.assertTrue(result["electricity_meter_id"])
@@ -105,3 +108,23 @@ class ParseTelegramTests(unittest.TestCase):
     def test_ignores_unknown_lines_and_empty_telegram(self) -> None:
         result = parser.parse_dsmr_telegram("/HEADER\n1-0:99.99.9(abc)\n!0000\n")
         self.assertEqual(result, {})
+
+    def test_derives_dsmr_4_version_from_obis_field(self) -> None:
+        telegram = (FIXTURES_PATH / "dsmr_4_0_isk.txt").read_text()
+
+        result = parser.parse_dsmr_telegram(telegram)
+
+        self.assertEqual(result["meter_manufacturer"], "ISk")
+        self.assertEqual(result["meter_model"], "2MT382-1 000")
+        self.assertEqual(result["dsmr_version"], "4.0")
+        self.assertEqual(result["protocol_family"], "DSMR v4.0")
+
+    def test_parses_header_without_backslash(self) -> None:
+        telegram = (FIXTURES_PATH / "dsmr_4_2_xmx.txt").read_text()
+
+        result = parser.parse_dsmr_telegram(telegram)
+
+        self.assertEqual(result["meter_manufacturer"], "XMX")
+        self.assertEqual(result["meter_model"], "LGBBFG10")
+        self.assertEqual(result["dsmr_version"], "4.2")
+        self.assertEqual(result["protocol_family"], "DSMR v4.2")
