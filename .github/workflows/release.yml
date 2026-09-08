@@ -46,8 +46,15 @@ jobs:
               --clobber
           else
             echo "Creating release..."
+
+            RELEASE_FLAGS=()
+            if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+              RELEASE_FLAGS+=(--prerelease)
+            fi
+
             gh release create "${GITHUB_REF_NAME}" \
               homey_p1.zip \
               --title "${GITHUB_REF_NAME}" \
-              --generate-notes
+              --generate-notes \
+              "${RELEASE_FLAGS[@]}"
           fi
