@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
-HEADER_RE = re.compile(r"^/(?P<manufacturer>[A-Za-z]{3})(?P<version>\d)\\(?P<model>.+)$")
+# The digit following the three-letter manufacturer code belongs to the
+# telegram header. It is not the DSMR protocol version.
+HEADER_RE = re.compile(
+    r"^/(?P<manufacturer>[A-Za-z]{3})\d(?P<model>.*)$"
+)
 LINE_RE = re.compile(r"^(?P<obis>[\d-]+:[\d.]+(?:\.\d+)?)\((?P<value>.*)\)$")
 UNIT_RE = re.compile(r"^(?P<value>[-\d.]+)\*(?P<unit>[A-Za-z0-9]+)$")
 GROUP_RE = re.compile(r"\(([^()]*)\)")
@@ -18,7 +23,44 @@ MBUS_READING_RE = re.compile(
     r"^0-(?P<channel>\d+):24\.2\.1\((?P<timestamp>\d{12}[SW])\)\((?P<value>[-\d.]+)\*(?P<unit>[A-Za-z0-9]+)\)$"
 )
 
-OBIS_MAP: dict[str, tuple[str, callable]] = {
+ValueCaster = Callable[[str], Any]
+
+
+class DSMRTelegramBuffer:
+    """Collect complete DSMR telegrams from websocket message chunks."""
+
+    def __init__(self) -> None:
+        """Initialize an empty telegram buffer."""
+        self._buffer = ""
+        self._telegram = ""
+        self._collecting = False
+
+    def feed(self, chunk: str) -> list[str]:
+        """Add a websocket chunk and return any complete telegrams."""
+        self._buffer += chunk
+        telegrams: list[str] = []
+
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            line = line.rstrip("\r")
+
+            if line.startswith("/"):
+                self._telegram = f"{line}\n"
+                self._collecting = True
+                continue
+
+            if not self._collecting:
+                continue
+
+            self._telegram += f"{line}\n"
+            if line.startswith("!"):
+                telegrams.append(self._telegram)
+                self._telegram = ""
+                self._collecting = False
+
+        return telegrams
+
+OBIS_MAP: dict[str, tuple[str, ValueCaster]] = {
     "1-3:0.2.8": ("dsmr_version", str),
     "0-0:96.1.0": ("equipment_id", str),
     "0-0:96.1.1": ("equipment_id", str),
@@ -70,10 +112,9 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
             header_match = HEADER_RE.match(line)
             if header_match:
                 parsed["meter_manufacturer"] = header_match.group("manufacturer")
-                parsed["meter_model"] = header_match.group("model")
-                parsed["protocol_family"] = (
-                    f"DSMR v{header_match.group('version')}"
-                )
+                model = header_match.group("model").removeprefix("\\")
+                if model:
+                    parsed["meter_model"] = model
             continue
 
         if line.startswith("!"):
@@ -96,6 +137,11 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
         value = _normalize_value(payload, caster)
         if value is not None:
             parsed[key] = value
+
+    if dsmr_version := parsed.get("dsmr_version"):
+        formatted_version = _format_dsmr_version(str(dsmr_version))
+        parsed["dsmr_version"] = formatted_version
+        parsed["protocol_family"] = f"DSMR v{formatted_version}"
 
     if equipment_id := parsed.get("equipment_id"):
         parsed["electricity_meter_id"] = _decode_hex_identifier(str(equipment_id))
@@ -158,7 +204,7 @@ def _parse_mbus_line(line: str, channels: dict[str, dict[str, Any]]) -> bool:
     return False
 
 
-def _normalize_value(payload: str, caster: callable) -> Any | None:
+def _normalize_value(payload: str, caster: ValueCaster) -> Any | None:
     """Convert a DSMR payload to the requested type."""
     unit_match = UNIT_RE.match(payload)
     raw_value = unit_match.group("value") if unit_match else payload
@@ -168,6 +214,14 @@ def _normalize_value(payload: str, caster: callable) -> Any | None:
     except (TypeError, ValueError):
         _LOGGER.debug("Unable to parse DSMR value %s with %s", payload, caster)
         return None
+
+
+def _format_dsmr_version(version: str) -> str:
+    """Format the DSMR version from OBIS 1-3:0.2.8 for display."""
+    if len(version) == 2 and version.isdigit():
+        return f"{version[0]}.{version[1]}"
+
+    return version
 
 
 def _decode_hex_identifier(value: str) -> str:

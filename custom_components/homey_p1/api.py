@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 
-from aiohttp import ClientError, ClientSession, WSServerHandshakeError, WSMsgType
+from aiohttp import ClientError, ClientSession, WSMsgType, WSServerHandshakeError
 
-from .const import DEFAULT_PORT, WS_PATH
+from .const import DEFAULT_PORT, VALIDATION_TIMEOUT_SECONDS, WS_PATH
+from .parser import DSMRTelegramBuffer, parse_dsmr_telegram
 
 
 class CannotConnectError(Exception):
@@ -38,22 +39,37 @@ async def async_validate_connection(session: ClientSession, host: str) -> None:
     url = f"ws://{host}:{DEFAULT_PORT}{WS_PATH}"
 
     try:
-        async with session.ws_connect(url, heartbeat=30, autoping=True) as websocket:
-            try:
-                message = await websocket.receive(timeout=1)
-            except TimeoutError:
-                return
-            except asyncio.TimeoutError:
-                return
+        async with asyncio.timeout(VALIDATION_TIMEOUT_SECONDS):
+            async with session.ws_connect(
+                url,
+                heartbeat=30,
+                autoping=True,
+            ) as websocket:
+                telegram_buffer = DSMRTelegramBuffer()
+                while True:
+                    message = await websocket.receive()
 
-            if message.type in (WSMsgType.TEXT, WSMsgType.BINARY):
-                return
+                    if message.type == WSMsgType.TEXT:
+                        chunk = message.data
+                    elif message.type == WSMsgType.BINARY:
+                        chunk = message.data.decode(errors="ignore")
+                    elif message.type in (
+                        WSMsgType.CLOSE,
+                        WSMsgType.CLOSED,
+                        WSMsgType.ERROR,
+                    ):
+                        raise classify_close_reason(str(message.extra or ""))
+                    else:
+                        continue
 
-            if message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR):
-                raise classify_close_reason(str(message.extra or ""))
+                    if any(
+                        parse_dsmr_telegram(telegram)
+                        for telegram in telegram_buffer.feed(chunk)
+                    ):
+                        return
     except LocalAPIDisabledError:
         raise
     except ConnectionLimitError:
         raise
-    except (ClientError, WSServerHandshakeError) as err:
+    except (ClientError, WSServerHandshakeError, TimeoutError) as err:
         raise CannotConnectError(str(err)) from err

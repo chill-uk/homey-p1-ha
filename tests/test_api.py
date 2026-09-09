@@ -52,7 +52,7 @@ class FakeWebSocket:
     """Minimal async websocket context manager for tests."""
 
     def __init__(self, message=None, raise_on_receive=None) -> None:
-        self.message = message
+        self.messages = [] if message is None else [message]
         self.raise_on_receive = raise_on_receive
 
     async def __aenter__(self):
@@ -64,7 +64,9 @@ class FakeWebSocket:
     async def receive(self, timeout=None):
         if self.raise_on_receive is not None:
             raise self.raise_on_receive
-        return self.message
+        if not self.messages:
+            raise TimeoutError
+        return self.messages.pop(0)
 
 
 class FakeSession:
@@ -92,15 +94,31 @@ class ValidateConnectionTests(unittest.IsolatedAsyncioTestCase):
         error = api.classify_close_reason("closed")
         self.assertIsInstance(error, api.CannotConnectError)
 
-    async def test_accepts_text_message(self) -> None:
+    async def test_accepts_parseable_text_telegram(self) -> None:
         session = FakeSession(
-            FakeWebSocket(SimpleNamespace(type=_WSMsgType.TEXT, extra="", data="ok"))
+            FakeWebSocket(
+                SimpleNamespace(
+                    type=_WSMsgType.TEXT,
+                    extra="",
+                    data="/ISk5\\MT382\n1-3:0.2.8(50)\n!ABCD\n",
+                )
+            )
         )
         await api.async_validate_connection(session, "192.168.1.10")
 
-    async def test_accepts_idle_open_connection(self) -> None:
+    async def test_rejects_idle_open_connection(self) -> None:
         session = FakeSession(FakeWebSocket(raise_on_receive=TimeoutError()))
-        await api.async_validate_connection(session, "192.168.1.10")
+
+        with self.assertRaises(api.CannotConnectError):
+            await api.async_validate_connection(session, "192.168.1.10")
+
+    async def test_rejects_unrecognized_text_message(self) -> None:
+        session = FakeSession(
+            FakeWebSocket(SimpleNamespace(type=_WSMsgType.TEXT, extra="", data="ok"))
+        )
+
+        with self.assertRaises(api.CannotConnectError):
+            await api.async_validate_connection(session, "192.168.1.10")
 
     async def test_detects_local_api_disabled(self) -> None:
         session = FakeSession(

@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.core import callback
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import (
@@ -33,10 +31,9 @@ class HomeyP1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
+            self._abort_if_host_already_configured(host)
             errors = await _async_validate_host(self.hass, host)
             if not errors:
-                self._abort_if_host_already_configured(host)
-
                 return self.async_create_entry(
                     title=user_input[CONF_NAME].strip() or DEFAULT_NAME,
                     data={
@@ -88,13 +85,20 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
 
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
+            _abort_if_host_already_configured(
+                self.config_entry,
+                self.hass.config_entries.async_entries(DOMAIN),
+                host,
+            )
+
+            if host.strip().lower() == current_host.strip().lower():
+                return self.async_create_entry(
+                    title="",
+                    data={CONF_HOST: host},
+                )
+
             errors = await _async_validate_host(self.hass, host)
             if not errors:
-                _abort_if_host_already_configured(
-                    self.config_entry,
-                    self.hass.config_entries.async_entries(DOMAIN),
-                    host,
-                )
                 return self.async_create_entry(
                     title="",
                     data={CONF_HOST: host},
