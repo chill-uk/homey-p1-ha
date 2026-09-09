@@ -25,8 +25,10 @@ from .const import (
     MAX_RECONNECT_DELAY_SECONDS,
     RECONNECT_DELAY_SECONDS,
     TELEGRAM_TIMEOUT_SECONDS,
+    TRANSIENT_FAILURE_GRACE_SECONDS,
     WS_PATH,
 )
+from .grace import LastKnownData
 from .parser import DSMRTelegramBuffer, parse_dsmr_telegram
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,8 +52,10 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         self._stopped = asyncio.Event()
         self._first_update = asyncio.Event()
         self._available = False
+        self._unavailable_task: asyncio.Task[None] | None = None
         self._reconnect_delay = RECONNECT_DELAY_SECONDS
         self._unique_id_updated = False
+        self._last_known_data = LastKnownData(TRANSIENT_FAILURE_GRACE_SECONDS)
         self.data = {}
 
     @property
@@ -67,6 +71,10 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         """Stop the websocket listener."""
         self._stopped.set()
         self._first_update.set()
+        if self._unavailable_task:
+            self._unavailable_task.cancel()
+            await self._unavailable_task
+            self._unavailable_task = None
         if self._task:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -167,7 +175,8 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
                         continue
 
                     await self._async_update_unique_id(parsed)
-                    self.async_set_updated_data(parsed)
+                    merged = self._last_known_data.update(parsed, loop.time())
+                    self.async_set_updated_data(merged)
                     self._first_update.set()
                     self._reconnect_delay = RECONNECT_DELAY_SECONDS
                     telegram_deadline = loop.time() + TELEGRAM_TIMEOUT_SECONDS
@@ -175,10 +184,34 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
 
     def _set_available(self, available: bool) -> None:
         """Update availability and notify listeners."""
-        if self._available == available:
+        if available:
+            if self._unavailable_task:
+                self._unavailable_task.cancel()
+                self._unavailable_task = None
+            if self._available:
+                return
+            self._available = True
+            self.async_update_listeners()
             return
 
-        self._available = available
+        if not self._available or self._unavailable_task:
+            return
+
+        self._unavailable_task = self.hass.async_create_task(
+            self._async_mark_unavailable_after_grace()
+        )
+
+    async def _async_mark_unavailable_after_grace(self) -> None:
+        """Mark the coordinator unavailable after a transient-failure grace period."""
+        try:
+            await asyncio.sleep(TRANSIENT_FAILURE_GRACE_SECONDS)
+        except asyncio.CancelledError:
+            return
+
+        self._unavailable_task = None
+        if not self._available:
+            return
+        self._available = False
         self.async_update_listeners()
 
     async def _async_update_unique_id(self, data: dict[str, object]) -> None:
