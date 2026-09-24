@@ -10,6 +10,8 @@
 
 This repository contains a custom Home Assistant integration that connects to a Homey Energy Dongle over its local WebSocket API and exposes common DSMR readings as sensors.
 
+No modifications to the hardware/firmware required. You just need to enable the local API via the app (see below).
+
 > [!NOTE]
 >The WebSocket connection behavior is based on Athom's
 >[Homey Energy Dongle Local API documentation](https://support.homey.app/hc/en-us/articles/18985951863452-Homey-Energy-Dongle-Local-API)
