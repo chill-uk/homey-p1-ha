@@ -8,6 +8,7 @@ import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PARSER_PATH = REPO_ROOT / "custom_components" / "homey_p1" / "parser.py"
+FRAMING_PATH = REPO_ROOT / "custom_components" / "homey_p1" / "framing.py"
 FIXTURES_PATH = REPO_ROOT / "tests" / "fixtures"
 
 # The DSMR 4.0 ISk and 4.2 XMX header/version combinations are based on
@@ -17,6 +18,11 @@ spec = importlib.util.spec_from_file_location("homey_p1_parser", PARSER_PATH)
 parser = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(parser)
+
+framing_spec = importlib.util.spec_from_file_location("homey_p1_framing", FRAMING_PATH)
+framing = importlib.util.module_from_spec(framing_spec)
+assert framing_spec.loader is not None
+framing_spec.loader.exec_module(framing)
 
 SAMPLE_TELEGRAM = r"""/XYZ5\TESTMETER-0001
 
@@ -105,6 +111,45 @@ class ParseTelegramTests(unittest.TestCase):
             bytes.fromhex(result["mbus_channels"]["2"]["equipment_id"]).decode("ascii"),
         )
 
+    def test_preserves_existing_normalized_values(self) -> None:
+        result = parser.parse_dsmr_telegram(SAMPLE_TELEGRAM)
+
+        expected = {
+            "energy_import_tariff_1": 1234.567,
+            "energy_import_tariff_2": 8765.432,
+            "energy_export_tariff_1": 123.456,
+            "energy_export_tariff_2": 234.567,
+            "power_consumption": 1.234,
+            "power_production": 0.321,
+            "power_consumption_l1": 0.789,
+            "power_production_l1": 0.111,
+            "voltage_l1": 230.4,
+            "current_l1": 6.0,
+            "power_failures": 3,
+            "long_power_failures": 1,
+            "voltage_sags_l1": 4,
+            "voltage_swells_l1": 1,
+        }
+
+        for key, value in expected.items():
+            self.assertEqual(result[key], value, key)
+
+    def test_supports_meter_reported_total_counters(self) -> None:
+        telegram = r"""/XYZ5\TESTMETER-0001
+
+1-3:0.2.8(50)
+1-0:1.8.0(010000.123*kWh)
+1-0:2.8.0(000500.456*kWh)
+!ABCD
+""".replace("\/", "/")
+
+        result = parser.parse_dsmr_telegram(telegram)
+
+        self.assertEqual(result["energy_import_total"], 10000.123)
+        self.assertEqual(result["energy_export_total"], 500.456)
+        self.assertNotIn("energy_import_tariff_1", result)
+        self.assertNotIn("energy_export_tariff_1", result)
+
     def test_ignores_unknown_lines_and_empty_telegram(self) -> None:
         result = parser.parse_dsmr_telegram("/HEADER\n1-0:99.99.9(abc)\n!0000\n")
         self.assertEqual(result, {})
@@ -130,7 +175,7 @@ class ParseTelegramTests(unittest.TestCase):
         self.assertEqual(result["protocol_family"], "DSMR v4.2")
 
     def test_buffers_telegram_split_across_websocket_messages(self) -> None:
-        telegram_buffer = parser.DSMRTelegramBuffer()
+        telegram_buffer = framing.DSMRTelegramBuffer()
 
         self.assertEqual(telegram_buffer.feed("noise\n/ISk5\\MT"), [])
         self.assertEqual(telegram_buffer.feed("382\n1-3:0.2.8(50)\n"), [])
@@ -143,7 +188,7 @@ class ParseTelegramTests(unittest.TestCase):
         )
 
     def test_buffers_multiple_telegrams_in_one_websocket_message(self) -> None:
-        telegram_buffer = parser.DSMRTelegramBuffer()
+        telegram_buffer = framing.DSMRTelegramBuffer()
         chunk = (
             "/ISk5\\MT382\n1-3:0.2.8(40)\n!AAAA\n"
             "/XMX5LGBBFG10\n1-3:0.2.8(42)\n!BBBB\n"
