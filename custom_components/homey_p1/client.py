@@ -9,9 +9,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 
-from aiohttp import ClientSession, WSMessageTypeError, WSMsgType
+from aiohttp import ClientSession, WSMsgType
 
 from .const import CONNECT_TIMEOUT_SECONDS, DEFAULT_PORT, TELEGRAM_TIMEOUT_SECONDS, WS_PATH
+from .framing import DSMRTelegramBuffer
 
 
 class CannotConnectError(Exception):
@@ -36,46 +37,6 @@ def classify_close_reason(reason: str) -> Exception:
     if "local api disabled" in reason_lower:
         return LocalAPIDisabledError(reason_text)
     return CannotConnectError(reason_text or "websocket closed")
-
-
-class DSMRTelegramBuffer:
-    """Collect DSMR telegrams that may be split across websocket messages."""
-
-    def __init__(self) -> None:
-        self._buffer = ""
-
-    def feed(self, chunk: str) -> list[str]:
-        """Add a websocket chunk and return any complete telegrams."""
-        self._buffer += chunk
-        telegrams: list[str] = []
-
-        while True:
-            start = self._buffer.find("/")
-            if start < 0:
-                # Retain no arbitrary websocket noise.
-                self._buffer = ""
-                break
-
-            if start:
-                self._buffer = self._buffer[start:]
-
-            end = self._buffer.find("!", 1)
-            if end < 0:
-                break
-
-            # A DSMR checksum, when present, is four hexadecimal characters
-            # after "!". Keep it if it is already in this websocket data.
-            end += 1
-            checksum_end = end
-            while checksum_end < len(self._buffer) and checksum_end < end + 4:
-                if self._buffer[checksum_end] not in "0123456789abcdefABCDEF":
-                    break
-                checksum_end += 1
-
-            telegrams.append(self._buffer[:checksum_end])
-            self._buffer = self._buffer[checksum_end:]
-
-        return telegrams
 
 
 class HomeyP1Client:
