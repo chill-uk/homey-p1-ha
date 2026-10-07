@@ -6,16 +6,15 @@ from datetime import datetime
 from decimal import Decimal
 import logging
 import re
-
 from typing import Any
 
 from dsmr_parser import telegram_specifications
 from dsmr_parser.exceptions import ParseError
 from dsmr_parser.parsers import TelegramParser
 
-_LOGGER = logging.getLogger(__name__)
-
 from .extensions import extended_spec
+
+_LOGGER = logging.getLogger(__name__)
 
 # Keep the existing integration output keys stable even though dsmr-parser uses
 # its own canonical property names internally.
