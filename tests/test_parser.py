@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import sys
+import types
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -14,9 +16,27 @@ FIXTURES_PATH = REPO_ROOT / "tests" / "fixtures"
 # The DSMR 4.0 ISk and 4.2 XMX header/version combinations are based on
 # Athom's node-dsmr-parser fixtures, which cover telegrams seen in practice.
 
-spec = importlib.util.spec_from_file_location("homey_p1_parser", PARSER_PATH)
+package = types.ModuleType("custom_components.homey_p1")
+package.__path__ = [str(PARSER_PATH.parent)]
+sys.modules.setdefault("custom_components", types.ModuleType("custom_components"))
+sys.modules["custom_components.homey_p1"] = package
+
+extensions_spec = importlib.util.spec_from_file_location(
+    "custom_components.homey_p1.extensions",
+    PARSER_PATH.parent / "extensions.py",
+)
+extensions = importlib.util.module_from_spec(extensions_spec)
+assert extensions_spec.loader is not None
+sys.modules["custom_components.homey_p1.extensions"] = extensions
+extensions_spec.loader.exec_module(extensions)
+
+spec = importlib.util.spec_from_file_location(
+    "custom_components.homey_p1.parser",
+    PARSER_PATH,
+)
 parser = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
+sys.modules["custom_components.homey_p1.parser"] = parser
 spec.loader.exec_module(parser)
 
 framing_spec = importlib.util.spec_from_file_location("homey_p1_framing", FRAMING_PATH)
