@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal
 import logging
 import re
+
 from typing import Any
 
-from dsmr_parser import obis_references as obis
 from dsmr_parser import telegram_specifications
 from dsmr_parser.exceptions import ParseError
-from dsmr_parser.parsers import CosemParser, TelegramParser, ValueParser
+from dsmr_parser.parsers import TelegramParser
 
 _LOGGER = logging.getLogger(__name__)
+
+from .extensions import extended_spec
 
 # Keep the existing integration output keys stable even though dsmr-parser uses
 # its own canonical property names internally.
@@ -58,38 +59,10 @@ DSMR_TO_HOMEY: dict[str, tuple[str, float]] = {
 }
 
 
-def _extended_spec(base_spec: dict[str, Any]) -> dict[str, Any]:
-    """Return a dsmr-parser spec with temporary compatibility extensions.
-
-    Generic DSMR additions should be contributed upstream. Keeping the extension
-    here lets supported meters work before the corresponding dsmr-parser release
-    is available, without leaking protocol details into the HA entity layer.
-    """
-    spec = deepcopy(base_spec)
-    extensions = (
-        ("ELECTRICITY_IMPORTED_TOTAL", getattr(obis, "ELECTRICITY_IMPORTED_TOTAL", None)),
-        ("ELECTRICITY_EXPORTED_TOTAL", getattr(obis, "ELECTRICITY_EXPORTED_TOTAL", None)),
-    )
-    existing = {item["value_name"] for item in spec["objects"]}
-
-    for value_name, reference in extensions:
-        if reference is None or value_name in existing:
-            continue
-        spec["objects"].append(
-            {
-                "obis_reference": reference,
-                "value_parser": CosemParser(ValueParser(Decimal)),
-                "value_name": value_name,
-            }
-        )
-
-    return spec
-
-
 _PARSERS = {
-    "3": TelegramParser(_extended_spec(telegram_specifications.V3), apply_checksum_validation=False),
-    "4": TelegramParser(_extended_spec(telegram_specifications.V4), apply_checksum_validation=False),
-    "5": TelegramParser(_extended_spec(telegram_specifications.V5), apply_checksum_validation=False),
+    "3": TelegramParser(extended_spec(telegram_specifications.V3), apply_checksum_validation=False),
+    "4": TelegramParser(extended_spec(telegram_specifications.V4), apply_checksum_validation=False),
+    "5": TelegramParser(extended_spec(telegram_specifications.V5), apply_checksum_validation=False),
 }
 
 
