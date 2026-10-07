@@ -260,8 +260,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up Homey P1 sensors."""
     coordinator: HomeyP1Coordinator = hass.data[DOMAIN][entry.entry_id]
+    optional_meter_keys = {"energy_import_total", "energy_export_total"}
     entities: list[SensorEntity] = [
-        HomeyP1Sensor(coordinator, entry, description) for description in SENSORS
+        HomeyP1Sensor(coordinator, entry, description)
+        for description in SENSORS
+        if description.key not in optional_meter_keys
+        or description.key in coordinator.data
     ]
     async_add_entities(entities)
 
