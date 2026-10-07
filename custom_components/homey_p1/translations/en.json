@@ -119,6 +119,12 @@
       },
       "voltage_swells_l3": {
         "name": "Voltage swells L3"
+      },
+      "energy_import_total": {
+        "name": "Energy import total"
+      },
+      "energy_export_total": {
+        "name": "Energy export total"
       }
     }
   }
