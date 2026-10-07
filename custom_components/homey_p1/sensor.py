@@ -38,6 +38,20 @@ class HomeyP1SensorDescription(SensorEntityDescription):
 
 SENSORS: tuple[HomeyP1SensorDescription, ...] = (
     HomeyP1SensorDescription(
+        key="energy_import_total",
+        translation_key="energy_import_total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    HomeyP1SensorDescription(
+        key="energy_export_total",
+        translation_key="energy_export_total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    HomeyP1SensorDescription(
         key="energy_import_tariff_1",
         translation_key="energy_import_tariff_1",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
