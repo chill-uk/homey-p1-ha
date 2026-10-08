@@ -184,6 +184,15 @@ class ParseTelegramTests(unittest.TestCase):
         self.assertEqual(result["dsmr_version"], "4.0")
         self.assertEqual(result["protocol_family"], "DSMR v4.0")
 
+    def test_strips_carriage_return_from_crlf_header(self) -> None:
+        """CRLF telegram headers do not leak a trailing carriage return."""
+        telegram = "/ISk5\\2MT382-1000\r\n1-3:0.2.8(50)\r\n!ABCD\r\n"
+
+        result = parser.parse_dsmr_telegram(telegram)
+
+        self.assertEqual(result["meter_model"], "2MT382-1000")
+        self.assertNotIn("\r", result["meter_model"])
+
     def test_parses_header_without_backslash(self) -> None:
         telegram = (FIXTURES_PATH / "dsmr_4_2_xmx.txt").read_text()
 

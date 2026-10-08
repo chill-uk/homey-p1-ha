@@ -58,6 +58,11 @@ DSMR_TO_HOMEY: dict[str, tuple[str, float]] = {
 }
 
 
+# Checksum validation is intentionally disabled here. The Homey websocket
+# transport currently exposes text and the parser normalizes line endings before
+# handing telegrams to dsmr-parser. CRC validation is byte-sensitive, so enabling
+# it here could reject valid telegrams after line-ending normalization. Revisit
+# this once the transport preserves the exact raw telegram bytes end-to-end.
 _PARSERS = {
     "3": TelegramParser(extended_spec(telegram_specifications.V3), apply_checksum_validation=False),
     "4": TelegramParser(extended_spec(telegram_specifications.V4), apply_checksum_validation=False),
@@ -82,7 +87,7 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
     header_match = HEADER_RE.search(telegram)
     if header_match:
         parsed["meter_manufacturer"] = header_match.group("manufacturer")
-        model = header_match.group("model").removeprefix("\\")
+        model = header_match.group("model").removeprefix("\\").strip()
         if model:
             parsed["meter_model"] = model
 
