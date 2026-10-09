@@ -25,6 +25,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import HomeyP1Coordinator
+from .discovery import OPTIONAL_METER_KEYS, new_optional_meter_keys
 from .mbus import classify_mbus_measurement, normalize_device_type
 
 
@@ -37,6 +38,20 @@ class HomeyP1SensorDescription(SensorEntityDescription):
 
 
 SENSORS: tuple[HomeyP1SensorDescription, ...] = (
+    HomeyP1SensorDescription(
+        key="energy_import_total",
+        translation_key="energy_import_total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    HomeyP1SensorDescription(
+        key="energy_export_total",
+        translation_key="energy_export_total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
     HomeyP1SensorDescription(
         key="energy_import_tariff_1",
         translation_key="energy_import_tariff_1",
@@ -246,32 +261,46 @@ async def async_setup_entry(
 ) -> None:
     """Set up Homey P1 sensors."""
     coordinator: HomeyP1Coordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[SensorEntity] = [
-        HomeyP1Sensor(coordinator, entry, description) for description in SENSORS
-    ]
-    async_add_entities(entities)
+    optional_meter_keys = frozenset(OPTIONAL_METER_KEYS)
+    sensor_by_key = {description.key: description for description in SENSORS}
 
+    async_add_entities(
+        HomeyP1Sensor(coordinator, entry, description)
+        for description in SENSORS
+        if description.key not in optional_meter_keys
+    )
+
+    known_optional_meter_keys: set[str] = set()
     known_mbus_channels: set[str] = set()
 
     @callback
-    def async_discover_mbus_channels() -> None:
-        """Add entities for M-Bus channels discovered after setup."""
+    def async_discover_entities() -> None:
+        """Add optional DSMR and M-Bus entities as capabilities appear."""
+        new_meter_keys = new_optional_meter_keys(
+            coordinator.data,
+            known_optional_meter_keys,
+        )
+        if new_meter_keys:
+            known_optional_meter_keys.update(new_meter_keys)
+            async_add_entities(
+                HomeyP1Sensor(coordinator, entry, sensor_by_key[key])
+                for key in new_meter_keys
+            )
+
         channels = coordinator.data.get("mbus_channels", {})
         if not isinstance(channels, dict):
             return
 
         new_channels = set(channels) - known_mbus_channels
-        if not new_channels:
-            return
+        if new_channels:
+            known_mbus_channels.update(new_channels)
+            async_add_entities(
+                HomeyP1MBusDeliveredSensor(coordinator, entry, channel)
+                for channel in sorted(new_channels, key=_mbus_channel_sort_key)
+            )
 
-        known_mbus_channels.update(new_channels)
-        async_add_entities(
-            HomeyP1MBusDeliveredSensor(coordinator, entry, channel)
-            for channel in sorted(new_channels, key=_mbus_channel_sort_key)
-        )
-
-    async_discover_mbus_channels()
-    entry.async_on_unload(coordinator.async_add_listener(async_discover_mbus_channels))
+    async_discover_entities()
+    entry.async_on_unload(coordinator.async_add_listener(async_discover_entities))
 
 
 class HomeyP1Sensor(CoordinatorEntity[HomeyP1Coordinator], SensorEntity):

@@ -75,7 +75,7 @@ class FakeSession:
     def __init__(self, websocket: FakeWebSocket) -> None:
         self.websocket = websocket
 
-    def ws_connect(self, url, heartbeat=None, autoping=None):
+    async def ws_connect(self, url, heartbeat=None, autoping=None):
         return self.websocket
 
 
