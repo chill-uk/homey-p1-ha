@@ -61,7 +61,9 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
 
     async def async_start(self) -> None:
         """Start the websocket listener."""
-        self._task = self.hass.async_create_task(self._run())
+        self._task = self.entry.async_create_background_task(
+            self.hass, self._run(), "homey_p1_websocket"
+        )
 
     async def async_shutdown(self) -> None:
         """Stop the websocket listener."""
@@ -69,7 +71,8 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         self._first_update.set()
         if self._unavailable_task:
             self._unavailable_task.cancel()
-            await self._unavailable_task
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._unavailable_task
             self._unavailable_task = None
         if self._task:
             self._task.cancel()
@@ -157,8 +160,10 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         if not self._available or self._unavailable_task:
             return
 
-        self._unavailable_task = self.hass.async_create_task(
-            self._async_mark_unavailable_after_grace()
+        self._unavailable_task = self.entry.async_create_background_task(
+            self.hass,
+            self._async_mark_unavailable_after_grace(),
+            "homey_p1_unavailable_grace",
         )
 
     async def _async_mark_unavailable_after_grace(self) -> None:
