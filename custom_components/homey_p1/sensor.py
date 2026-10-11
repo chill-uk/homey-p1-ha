@@ -19,6 +19,7 @@ from homeassistant.const import (
     UnitOfVolume,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -415,7 +416,7 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
         meter_id = self._channel_data.get("equipment_id", f"channel:{self.channel}")
         return DeviceInfo(
             identifiers={(DOMAIN, f"mbus:{self.channel}:{meter_id}")},
-            via_device=self.coordinator.primary_device_identifier,
+            via_device_id=self._parent_device_id(),
             model=_mbus_device_details(
                 self.channel,
                 self._channel_data.get("device_type"),
@@ -423,6 +424,18 @@ class HomeyP1MBusDeliveredSensor(CoordinatorEntity[HomeyP1Coordinator], SensorEn
             name=_mbus_device_title(self._channel_data.get("device_type")),
             serial_number=self._channel_data.get("meter_id"),
         )
+
+
+    def _parent_device_id(self) -> str | None:
+        """Resolve the parent electricity meter device in this config entry."""
+        try:
+            return dr.async_get_device_id_by_identifier(
+                self.hass,
+                self.coordinator.primary_device_identifier,
+                config_entry_id=self.entry.entry_id,
+            )
+        except ValueError:
+            return None
 
 
 def _mbus_device_type_name(device_type: object) -> str:
