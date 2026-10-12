@@ -13,7 +13,8 @@
     "custom_components.homey_p1"
   ],
   "requirements": [
-    "dsmr-parser>=1.11.1"
+    "dsmr-parser>=1.11.1",
+    "p1-dsmr-common>=0.1.0"
   ],
   "version": "0.5.1"
 }
