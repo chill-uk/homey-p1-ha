@@ -11,6 +11,7 @@ from typing import Any
 from dsmr_parser import telegram_specifications
 from dsmr_parser.exceptions import ParseError
 from dsmr_parser.parsers import TelegramParser
+from p1_dsmr_common.mappings import GLOBAL_MAPPING, resolve_mapping
 
 from .extensions import extended_spec
 
@@ -26,36 +27,23 @@ MBUS_TIMESTAMP_RE = re.compile(
     re.MULTILINE,
 )
 
-DSMR_TO_HOMEY: dict[str, tuple[str, float]] = {
-    "ELECTRICITY_IMPORTED_TOTAL": ("energy_import_total", 1.0),
-    "ELECTRICITY_EXPORTED_TOTAL": ("energy_export_total", 1.0),
-    "ELECTRICITY_USED_TARIFF_1": ("energy_import_tariff_1", 1.0),
-    "ELECTRICITY_USED_TARIFF_2": ("energy_import_tariff_2", 1.0),
-    "ELECTRICITY_DELIVERED_TARIFF_1": ("energy_export_tariff_1", 1.0),
-    "ELECTRICITY_DELIVERED_TARIFF_2": ("energy_export_tariff_2", 1.0),
-    "CURRENT_ELECTRICITY_USAGE": ("power_consumption", 1.0),
-    "CURRENT_ELECTRICITY_DELIVERY": ("power_production", 1.0),
-    "INSTANTANEOUS_ACTIVE_POWER_L1_POSITIVE": ("power_consumption_l1", 1.0),
-    "INSTANTANEOUS_ACTIVE_POWER_L2_POSITIVE": ("power_consumption_l2", 1.0),
-    "INSTANTANEOUS_ACTIVE_POWER_L3_POSITIVE": ("power_consumption_l3", 1.0),
-    "INSTANTANEOUS_ACTIVE_POWER_L1_NEGATIVE": ("power_production_l1", 1.0),
-    "INSTANTANEOUS_ACTIVE_POWER_L2_NEGATIVE": ("power_production_l2", 1.0),
-    "INSTANTANEOUS_ACTIVE_POWER_L3_NEGATIVE": ("power_production_l3", 1.0),
-    "INSTANTANEOUS_CURRENT_L1": ("current_l1", 1.0),
-    "INSTANTANEOUS_CURRENT_L2": ("current_l2", 1.0),
-    "INSTANTANEOUS_CURRENT_L3": ("current_l3", 1.0),
-    "INSTANTANEOUS_VOLTAGE_L1": ("voltage_l1", 1.0),
-    "INSTANTANEOUS_VOLTAGE_L2": ("voltage_l2", 1.0),
-    "INSTANTANEOUS_VOLTAGE_L3": ("voltage_l3", 1.0),
-    "VOLTAGE_SAG_L1_COUNT": ("voltage_sags_l1", 1.0),
-    "VOLTAGE_SAG_L2_COUNT": ("voltage_sags_l2", 1.0),
-    "VOLTAGE_SAG_L3_COUNT": ("voltage_sags_l3", 1.0),
-    "VOLTAGE_SWELL_L1_COUNT": ("voltage_swells_l1", 1.0),
-    "VOLTAGE_SWELL_L2_COUNT": ("voltage_swells_l2", 1.0),
-    "VOLTAGE_SWELL_L3_COUNT": ("voltage_swells_l3", 1.0),
-    "SHORT_POWER_FAILURE_COUNT": ("power_failures", 1.0),
-    "LONG_POWER_FAILURE_COUNT": ("long_power_failures", 1.0),
+LOCAL_MAPPING: dict[str, str] = {
+    "CURRENT_ELECTRICITY_USAGE": "power_consumption",
+    "CURRENT_ELECTRICITY_DELIVERY": "power_production",
+    "INSTANTANEOUS_ACTIVE_POWER_L1_POSITIVE": "power_consumption_l1",
+    "INSTANTANEOUS_ACTIVE_POWER_L2_POSITIVE": "power_consumption_l2",
+    "INSTANTANEOUS_ACTIVE_POWER_L3_POSITIVE": "power_consumption_l3",
+    "INSTANTANEOUS_ACTIVE_POWER_L1_NEGATIVE": "power_production_l1",
+    "INSTANTANEOUS_ACTIVE_POWER_L2_NEGATIVE": "power_production_l2",
+    "INSTANTANEOUS_ACTIVE_POWER_L3_NEGATIVE": "power_production_l3",
 }
+
+MAPPED_DSMR_FIELDS = tuple(
+    source_name
+    for source_name in GLOBAL_MAPPING
+    if source_name != "ELECTRICITY_ACTIVE_TARIFF"
+)
+
 
 
 # Checksum validation is intentionally disabled here. The Homey websocket
@@ -112,14 +100,14 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
         except (TypeError, ValueError):
             parsed["tariff_indicator"] = tariff.value
 
-    for source_name, (destination, scale) in DSMR_TO_HOMEY.items():
+    for source_name in MAPPED_DSMR_FIELDS:
         source = getattr(parsed_telegram, source_name, None)
         if source is None:
             continue
-        value = _plain_value(source.value)
-        if isinstance(value, (int, float)):
-            value *= scale
-        parsed[destination] = value
+        destination = resolve_mapping(source_name, LOCAL_MAPPING)
+        if destination is None:
+            continue
+        parsed[destination] = _plain_value(source.value)
 
     _normalize_mbus(parsed_telegram, telegram, parsed)
 
