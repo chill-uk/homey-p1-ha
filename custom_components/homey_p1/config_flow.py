@@ -107,7 +107,7 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
             if not errors:
                 return self.async_create_entry(
                     title="",
-                    data={CONF_HOST: host},
+                    data={CONF_HOST: host, CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE: capture},
                 )
 
         return self.async_show_form(
