@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import base64
+import importlib.util
 import json
+import pathlib
+import sys
+import types
 import unittest
 from datetime import UTC, datetime
 
 from nacl.public import PrivateKey, SealedBox
-
-import importlib.util
-import pathlib
-import sys
-import types
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE = "custom_components.homey_p1"
@@ -31,6 +30,7 @@ def load_capture():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
 
 capture_module = load_capture()
 
