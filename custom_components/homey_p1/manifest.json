@@ -13,6 +13,7 @@
     "custom_components.homey_p1"
   ],
   "requirements": [
+    "PyNaCl>=1.6.2",
     "dsmr-parser>=1.11.1",
     "p1-dsmr-common>=0.1.0"
   ],
