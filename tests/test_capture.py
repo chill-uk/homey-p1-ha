@@ -9,9 +9,30 @@ from datetime import UTC, datetime
 
 from nacl.public import PrivateKey, SealedBox
 
-from .helpers import load_module
+import importlib.util
+import pathlib
+import sys
+import types
 
-capture_module = load_module("custom_components.homey_p1.capture")
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+PACKAGE = "custom_components.homey_p1"
+if PACKAGE not in sys.modules:
+    package = types.ModuleType(PACKAGE)
+    package.__path__ = [str(ROOT / "custom_components" / "homey_p1")]
+    sys.modules.setdefault("custom_components", types.ModuleType("custom_components"))
+    sys.modules[PACKAGE] = package
+
+
+def load_capture():
+    """Load the capture module without importing Home Assistant."""
+    path = ROOT / "custom_components" / "homey_p1" / "capture.py"
+    spec = importlib.util.spec_from_file_location(f"{PACKAGE}.capture", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+capture_module = load_capture()
 
 
 class EncryptedDiagnosticCaptureTests(unittest.TestCase):
