@@ -62,6 +62,10 @@ After adding the integration, enter the IP address of your Homey Energy Dongle.
 
 You can update it later from the integration options.
 
+### Encrypted support diagnostics
+
+In the integration options, enable **Capture encrypted support diagnostics** to start an opt-in capture session. It retains at most 120 encrypted telegram records over 10 minutes, only in memory. Use **Download diagnostics** from the Homey P1 integration menu to export the encrypted records and connection metadata. Plaintext telegrams and meter identifiers are not included in the export. The support key holder can decrypt the records, which may contain meter identifiers and consumption data. Disabling capture or reloading the integration clears the current session.
+
 ## Features
 
 - Connects to `ws://<homey-p1-ip>/ws`
