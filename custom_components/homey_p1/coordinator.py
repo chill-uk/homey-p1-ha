@@ -13,6 +13,9 @@ from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from p1_dsmr_common.crc import validate_crc
+
+from .capture import EncryptedDiagnosticCapture
 from .client import (
     CannotConnectError,
     ConnectionLimitError,
@@ -20,6 +23,7 @@ from .client import (
     LocalAPIDisabledError,
 )
 from .const import (
+    CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE,
     MAX_RECONNECT_DELAY_SECONDS,
     RECONNECT_DELAY_SECONDS,
     TRANSIENT_FAILURE_GRACE_SECONDS,
@@ -53,6 +57,9 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         self._unique_id_updated = False
         self._last_known_data = LastKnownData(TRANSIENT_FAILURE_GRACE_SECONDS)
         self.data = {}
+        self.encrypted_capture = EncryptedDiagnosticCapture(
+            entry.options.get(CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, False)
+        )
 
     @property
     def available(self) -> bool:
@@ -78,6 +85,7 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+        self.encrypted_capture.clear()
 
     async def async_wait_for_initial_data(self, timeout: float = 10.0) -> bool:
         """Wait briefly for the first parsed telegram."""
@@ -134,7 +142,29 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
             if self._stopped.is_set():
                 break
 
-            parsed = parse_dsmr_telegram(telegram)
+            try:
+                parsed = parse_dsmr_telegram(telegram)
+            except Exception as err:
+                self.encrypted_capture.capture(
+                    {
+                        "outcome": "parser_error",
+                        "telegram": telegram,
+                        "error_type": type(err).__name__,
+                    }
+                )
+                raise
+            self.encrypted_capture.capture(
+                {
+                    "outcome": "accepted" if parsed else "parser_invalid",
+                    "telegram": telegram,
+                    "crc": {
+                        "valid": (crc := validate_crc(telegram)).valid,
+                        "reported": crc.reported,
+                        "calculated": crc.calculated,
+                        "error": crc.error,
+                    },
+                }
+            )
             if not parsed:
                 continue
 
