@@ -27,9 +27,10 @@
     "step": {
       "init": {
         "title": "Homey P1 options",
-        "description": "Update the Homey Energy Dongle IP address.",
+        "description": "Update the dongle IP address and configure opt-in encrypted support diagnostics.",
         "data": {
-          "host": "Homey Energy Dongle IP address"
+          "host": "Homey Energy Dongle IP address",
+          "encrypted_diagnostic_capture": "Capture encrypted support diagnostics (10 minutes, max 120 records)"
         }
       }
     }
