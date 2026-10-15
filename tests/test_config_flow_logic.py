@@ -81,6 +81,10 @@ fake_vol.Optional = lambda key, default=None: key
 fake_vol.Schema = lambda schema: schema
 sys.modules["voluptuous"] = fake_vol
 
+fake_selector = types.ModuleType("homeassistant.helpers.selector")
+fake_selector.BooleanSelector = lambda: bool
+sys.modules["homeassistant.helpers.selector"] = fake_selector
+
 fake_aiohttp_client = types.ModuleType("homeassistant.helpers.aiohttp_client")
 fake_aiohttp_client.async_get_clientsession = lambda hass: None
 sys.modules["homeassistant.helpers"] = types.ModuleType("homeassistant.helpers")
