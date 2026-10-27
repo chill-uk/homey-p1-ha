@@ -13,7 +13,6 @@ from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from p1_dsmr_common.crc import validate_crc
 
 from .capture import EncryptedDiagnosticCapture
 from .client import (
@@ -142,29 +141,12 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
             if self._stopped.is_set():
                 break
 
-            try:
-                parsed = parse_dsmr_telegram(telegram)
-            except Exception as err:
-                self.encrypted_capture.capture(
-                    {
-                        "outcome": "parser_error",
-                        "telegram": telegram,
-                        "error_type": type(err).__name__,
-                    }
-                )
-                raise
+            # Encrypt the as-received text before any parser or CRC handling.
+            # One ciphertext record per telegram, including parse failures.
             self.encrypted_capture.capture(
-                {
-                    "outcome": "accepted" if parsed else "parser_invalid",
-                    "telegram": telegram,
-                    "crc": {
-                        "valid": (crc := validate_crc(telegram)).valid,
-                        "reported": crc.reported,
-                        "calculated": crc.calculated,
-                        "error": crc.error,
-                    },
-                }
+                {"outcome": "received_unparsed", "telegram": telegram}
             )
+            parsed = parse_dsmr_telegram(telegram)
             if not parsed:
                 continue
 
