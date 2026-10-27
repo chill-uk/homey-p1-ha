@@ -12,6 +12,7 @@ from dsmr_parser import telegram_specifications
 from dsmr_parser.exceptions import ParseError
 from dsmr_parser.parsers import TelegramParser
 from p1_dsmr_common.mappings import GLOBAL_MAPPING, resolve_mapping
+from p1_dsmr_common.mbus import get_mbus_field
 
 from .extensions import extended_spec
 
@@ -133,21 +134,21 @@ def _normalize_mbus(parsed_telegram: Any, raw_telegram: str, parsed: dict[str, A
         channel = str(device.channel_id)
         channel_data: dict[str, Any] = {}
 
-        device_type = getattr(device, "MBUS_DEVICE_TYPE", None)
+        device_type = get_mbus_field(device, "MBUS_DEVICE_TYPE")
         if device_type is not None:
             channel_data["device_type"] = _plain_value(device_type.value)
 
-        equipment = getattr(device, "MBUS_EQUIPMENT_IDENTIFIER", None)
+        equipment = get_mbus_field(device, "MBUS_EQUIPMENT_IDENTIFIER")
         if equipment is not None:
             equipment_id = str(equipment.value)
             channel_data["equipment_id"] = equipment_id
             channel_data["meter_id"] = _decode_hex_identifier(equipment_id)
 
-        reading = getattr(device, "MBUS_METER_READING", None)
+        reading = get_mbus_field(device, "MBUS_METER_READING")
         if reading is not None:
             channel_data["delivered"] = _plain_value(reading.value)
             channel_data["unit"] = reading.unit
-            channel_data["timestamp"] = timestamps.get(channel, _timestamp_string(reading.datetime))
+            channel_data["timestamp"] = timestamps.get(channel, _timestamp_string(getattr(reading, "datetime", None)))
 
         if channel_data:
             channels[channel] = channel_data
