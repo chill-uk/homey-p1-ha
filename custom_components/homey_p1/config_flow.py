@@ -8,6 +8,7 @@ from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import selector
 
 from .api import (
     CannotConnectError,
@@ -15,7 +16,7 @@ from .api import (
     LocalAPIDisabledError,
     async_validate_connection,
 )
-from .const import DEFAULT_NAME, DOMAIN
+from .const import CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, DEFAULT_NAME, DOMAIN
 
 
 class HomeyP1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -74,7 +75,7 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
     """Handle Homey P1 options."""
 
     async def async_step_init(
-        self, user_input: dict[str, str] | None = None
+        self, user_input: dict[str, str | bool] | None = None
     ) -> FlowResult:
         """Manage integration options."""
         errors: dict[str, str] = {}
@@ -83,8 +84,13 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
             self.config_entry.data[CONF_HOST],
         )
 
+        current_capture = self.config_entry.options.get(
+            CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, False
+        )
+
         if user_input is not None:
-            host = user_input[CONF_HOST].strip()
+            capture = bool(user_input.get(CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, False))
+            host = str(user_input[CONF_HOST]).strip()
             _abort_if_host_already_configured(
                 self.config_entry,
                 self.hass.config_entries.async_entries(DOMAIN),
@@ -94,14 +100,14 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
             if host.strip().lower() == current_host.strip().lower():
                 return self.async_create_entry(
                     title="",
-                    data={CONF_HOST: host},
+                    data={CONF_HOST: host, CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE: capture},
                 )
 
             errors = await _async_validate_host(self.hass, host)
             if not errors:
                 return self.async_create_entry(
                     title="",
-                    data={CONF_HOST: host},
+                    data={CONF_HOST: host, CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE: capture},
                 )
 
         return self.async_show_form(
@@ -109,6 +115,9 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_HOST, default=current_host): str,
+                    vol.Required(
+                        CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, default=current_capture
+                    ): selector.BooleanSelector(),
                 }
             ),
             errors=errors,

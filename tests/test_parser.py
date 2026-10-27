@@ -131,6 +131,26 @@ class ParseTelegramTests(unittest.TestCase):
             bytes.fromhex(result["mbus_channels"]["2"]["equipment_id"]).decode("ascii"),
         )
 
+    def test_dsmr4_kaifa_gas_legacy_attributes(self) -> None:
+        """DSMR 4 gas values use the upstream gas-specific attribute names."""
+        telegram = r"""/KFM5KAIFA-METER
+
+1-3:0.2.8(42)
+1-0:1.8.1(000123.456*kWh)
+1-0:1.7.0(00.123*kW)
+0-1:24.1.0(003)
+0-1:96.1.0(3030303030303030303030303030303030)
+0-1:24.2.1(261026190000W)(12334.675*m3)
+!0000
+"""
+        parsed = parser.parse_dsmr_telegram(telegram)
+        self.assertEqual(parsed["dsmr_version"], "4.2")
+        self.assertEqual(parsed["mbus_channels"]["1"]["device_type"], 3)
+        self.assertEqual(parsed["mbus_channels"]["1"]["delivered"], 12334.675)
+        self.assertEqual(parsed["mbus_channels"]["1"]["unit"], "m3")
+        self.assertEqual(parsed["gas_delivered"], 12334.675)
+        self.assertEqual(parsed["gas_timestamp"], "261026190000W")
+
     def test_preserves_existing_normalized_values(self) -> None:
         result = parser.parse_dsmr_telegram(SAMPLE_TELEGRAM)
 
