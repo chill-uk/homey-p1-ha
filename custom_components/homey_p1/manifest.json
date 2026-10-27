@@ -17,5 +17,5 @@
     "dsmr-parser>=1.11.1",
     "p1-dsmr-common>=0.1.2"
   ],
-  "version": "0.6.0"
+  "version": "0.6.1"
 }
