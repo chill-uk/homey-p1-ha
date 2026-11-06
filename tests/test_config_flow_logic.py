@@ -76,8 +76,8 @@ fake_flow.FlowResult = dict
 sys.modules["homeassistant.data_entry_flow"] = fake_flow
 
 fake_vol = types.ModuleType("voluptuous")
-fake_vol.Required = lambda key, default=None: key
-fake_vol.Optional = lambda key, default=None: key
+fake_vol.Required = lambda key, default=None, **kwargs: key
+fake_vol.Optional = lambda key, default=None, **kwargs: key
 fake_vol.Schema = lambda schema: schema
 sys.modules["voluptuous"] = fake_vol
 
@@ -94,9 +94,11 @@ fake_api = types.ModuleType("custom_components.homey_p1.api")
 fake_api.CannotConnectError = Exception
 fake_api.ConnectionLimitError = Exception
 fake_api.LocalAPIDisabledError = Exception
+fake_api.EncryptionKeyRequiredError = Exception
+fake_api.InvalidKeyError = Exception
 
 
-async def _noop_validate_connection(session, host):
+async def _noop_validate_connection(session, host, *args):
     return None
 
 

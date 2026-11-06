@@ -3,7 +3,10 @@
     "error": {
       "cannot_connect": "Failed to connect to the Homey Energy Dongle.",
       "connection_limit": "The Homey Energy Dongle has reached its local API connection limit.",
-      "local_api_disabled": "The Homey Energy Dongle Local API is disabled."
+      "local_api_disabled": "The Homey Energy Dongle Local API is disabled.",
+      "encryption_key_required": "The meter sends encrypted telegrams. Enter the encryption key (GUEK) provided by your network operator.",
+      "invalid_encryption_key": "The telegrams could not be decrypted. Check the encryption key (GUEK) and authentication key (GAK).",
+      "invalid_key_format": "Keys must be 32 hexadecimal characters."
     },
     "step": {
       "init": {
@@ -15,10 +18,16 @@
       },
       "user": {
         "title": "Connect to Homey P1",
-        "description": "Add your Homey Energy Dongle local WebSocket endpoint.",
+        "description": "Add your Homey Energy Dongle local WebSocket endpoint. Meters with an encrypted customer interface also need the keys from your network operator.",
         "data": {
           "host": "Homey Energy Dongle IP address",
-          "name": "Name"
+          "name": "Name",
+          "encryption_key": "Encryption key (GUEK, optional)",
+          "authentication_key": "Authentication key (GAK, optional)"
+        },
+        "data_description": {
+          "encryption_key": "Only needed for meters that encrypt the P1 data. 32 hex characters.",
+          "authentication_key": "Used to verify encrypted telegrams. Leave empty if your operator only provides one key."
         }
       }
     }
@@ -27,12 +36,22 @@
     "step": {
       "init": {
         "title": "Homey P1 options",
-        "description": "Update the dongle IP address and configure opt-in encrypted support diagnostics.",
+        "description": "Update the dongle IP address, decryption keys, and configure opt-in encrypted support diagnostics.",
         "data": {
           "host": "Homey Energy Dongle IP address",
-          "encrypted_diagnostic_capture": "Capture encrypted support diagnostics (10 minutes, max 120 records)"
+          "encrypted_diagnostic_capture": "Capture encrypted support diagnostics (10 minutes, max 120 records)",
+          "encryption_key": "Encryption key (GUEK, optional)",
+          "authentication_key": "Authentication key (GAK, optional)"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the Homey Energy Dongle.",
+      "connection_limit": "The Homey Energy Dongle has reached its local API connection limit.",
+      "local_api_disabled": "The Homey Energy Dongle Local API is disabled.",
+      "encryption_key_required": "The meter sends encrypted telegrams. Enter the encryption key (GUEK) provided by your network operator.",
+      "invalid_encryption_key": "The telegrams could not be decrypted. Check the encryption key (GUEK) and authentication key (GAK).",
+      "invalid_key_format": "Keys must be 32 hexadecimal characters."
     }
   },
   "entity": {

@@ -157,3 +157,35 @@ class ValidateConnectionTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(api.CannotConnectError):
             await api.async_validate_connection(session, "192.168.1.10")
+
+
+class EncryptedValidationTests(unittest.IsolatedAsyncioTestCase):
+    """Test validation against meters that send encrypted DLMS frames."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        sys.path.insert(0, str(REPO_ROOT / "tests"))
+        import test_decryption  # noqa: PLC0415
+
+        cls.helpers = test_decryption
+
+    def _session(self) -> FakeSession:
+        frame = self.helpers.build_frame(self.helpers._telegram().encode())
+        return FakeSession(
+            FakeWebSocket(SimpleNamespace(type=_WSMsgType.BINARY, extra="", data=frame))
+        )
+
+    async def test_requires_key_for_encrypted_frames(self) -> None:
+        with self.assertRaises(api.EncryptionKeyRequiredError):
+            await api.async_validate_connection(self._session(), "192.168.1.10")
+
+    async def test_accepts_encrypted_frames_with_keys(self) -> None:
+        await api.async_validate_connection(
+            self._session(), "192.168.1.10", self.helpers.EK, self.helpers.AK
+        )
+
+    async def test_rejects_wrong_key(self) -> None:
+        with self.assertRaises(api.InvalidKeyError):
+            await api.async_validate_connection(
+                self._session(), "192.168.1.10", bytes(16), self.helpers.AK
+            )
