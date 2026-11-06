@@ -13,10 +13,19 @@ from homeassistant.helpers import selector
 from .api import (
     CannotConnectError,
     ConnectionLimitError,
+    EncryptionKeyRequiredError,
+    InvalidKeyError,
     LocalAPIDisabledError,
     async_validate_connection,
 )
-from .const import CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, DEFAULT_NAME, DOMAIN
+from .const import (
+    CONF_AUTHENTICATION_KEY,
+    CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE,
+    CONF_ENCRYPTION_KEY,
+    DEFAULT_NAME,
+    DOMAIN,
+)
+from .decryption import normalize_key
 
 
 class HomeyP1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -33,22 +42,36 @@ class HomeyP1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
             self._abort_if_host_already_configured(host)
-            errors = await _async_validate_host(self.hass, host)
+            keys = _clean_keys(user_input)
+            errors = await _async_validate_host(self.hass, host, keys)
             if not errors:
+                name = user_input.get(CONF_NAME, "").strip() or DEFAULT_NAME
                 return self.async_create_entry(
-                    title=user_input[CONF_NAME].strip() or DEFAULT_NAME,
-                    data={
-                        CONF_HOST: host,
-                        CONF_NAME: user_input[CONF_NAME].strip() or DEFAULT_NAME,
-                    },
+                    title=name,
+                    data={CONF_HOST: host, CONF_NAME: name, **keys},
                 )
 
+        defaults = user_input or {}
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_HOST): str,
-                    vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
+                    vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
+                    vol.Optional(
+                        CONF_NAME, default=defaults.get(CONF_NAME, DEFAULT_NAME)
+                    ): str,
+                    vol.Optional(
+                        CONF_ENCRYPTION_KEY,
+                        description={
+                            "suggested_value": defaults.get(CONF_ENCRYPTION_KEY)
+                        },
+                    ): str,
+                    vol.Optional(
+                        CONF_AUTHENTICATION_KEY,
+                        description={
+                            "suggested_value": defaults.get(CONF_AUTHENTICATION_KEY)
+                        },
+                    ): str,
                 }
             ),
             errors=errors,
@@ -83,6 +106,10 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
             CONF_HOST,
             self.config_entry.data[CONF_HOST],
         )
+        current_keys = {
+            key: self.config_entry.options.get(key, self.config_entry.data.get(key, ""))
+            for key in (CONF_ENCRYPTION_KEY, CONF_AUTHENTICATION_KEY)
+        }
 
         current_capture = self.config_entry.options.get(
             CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, False
@@ -91,23 +118,28 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
         if user_input is not None:
             capture = bool(user_input.get(CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, False))
             host = str(user_input[CONF_HOST]).strip()
+            keys = _clean_keys(user_input)
             _abort_if_host_already_configured(
                 self.config_entry,
                 self.hass.config_entries.async_entries(DOMAIN),
                 host,
             )
 
-            if host.strip().lower() == current_host.strip().lower():
-                return self.async_create_entry(
-                    title="",
-                    data={CONF_HOST: host, CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE: capture},
-                )
-
-            errors = await _async_validate_host(self.hass, host)
+            unchanged = host.strip().lower() == current_host.strip().lower() and all(
+                keys.get(key, "") == (current_keys[key] or "")
+                for key in current_keys
+            )
+            if not unchanged:
+                errors = await _async_validate_host(self.hass, host, keys)
             if not errors:
                 return self.async_create_entry(
                     title="",
-                    data={CONF_HOST: host, CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE: capture},
+                    data={
+                        CONF_HOST: host,
+                        CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE: capture,
+                        CONF_ENCRYPTION_KEY: keys.get(CONF_ENCRYPTION_KEY, ""),
+                        CONF_AUTHENTICATION_KEY: keys.get(CONF_AUTHENTICATION_KEY, ""),
+                    },
                 )
 
         return self.async_show_form(
@@ -115,6 +147,16 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_HOST, default=current_host): str,
+                    vol.Optional(
+                        CONF_ENCRYPTION_KEY,
+                        description={"suggested_value": current_keys[CONF_ENCRYPTION_KEY]},
+                    ): str,
+                    vol.Optional(
+                        CONF_AUTHENTICATION_KEY,
+                        description={
+                            "suggested_value": current_keys[CONF_AUTHENTICATION_KEY]
+                        },
+                    ): str,
                     vol.Required(
                         CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE, default=current_capture
                     ): selector.BooleanSelector(),
@@ -124,20 +166,47 @@ class HomeyP1OptionsFlow(config_entries.OptionsFlowWithReload):
         )
 
 
+def _clean_keys(user_input: dict) -> dict[str, str]:
+    """Return non-empty key fields as compact upper-case hex strings."""
+    keys: dict[str, str] = {}
+    for field in (CONF_ENCRYPTION_KEY, CONF_AUTHENTICATION_KEY):
+        raw = str(user_input.get(field) or "")
+        cleaned = "".join(ch for ch in raw if ch not in " \t\r\n:-").upper()
+        if cleaned:
+            keys[field] = cleaned
+    return keys
+
+
 async def _async_validate_host(
     hass: HomeAssistant,
     host: str,
+    keys: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Validate a websocket host and map errors to config flow strings."""
+    keys = keys or {}
+    try:
+        encryption_key = normalize_key(keys.get(CONF_ENCRYPTION_KEY))
+        authentication_key = normalize_key(keys.get(CONF_AUTHENTICATION_KEY))
+    except ValueError:
+        return {"base": "invalid_key_format"}
+    if authentication_key is not None and encryption_key is None:
+        return {"base": "encryption_key_required"}
+
     try:
         await async_validate_connection(
             async_get_clientsession(hass),
             host,
+            encryption_key,
+            authentication_key,
         )
     except LocalAPIDisabledError:
         return {"base": "local_api_disabled"}
     except ConnectionLimitError:
         return {"base": "connection_limit"}
+    except EncryptionKeyRequiredError:
+        return {"base": "encryption_key_required"}
+    except InvalidKeyError:
+        return {"base": "invalid_encryption_key"}
     except CannotConnectError:
         return {"base": "cannot_connect"}
 

@@ -19,15 +19,19 @@ from .capture import EncryptedDiagnosticCapture
 from .client import (
     CannotConnectError,
     ConnectionLimitError,
+    EncryptionKeyRequiredError,
     HomeyP1Client,
     LocalAPIDisabledError,
 )
 from .const import (
+    CONF_AUTHENTICATION_KEY,
     CONF_ENCRYPTED_DIAGNOSTIC_CAPTURE,
+    CONF_ENCRYPTION_KEY,
     MAX_RECONNECT_DELAY_SECONDS,
     RECONNECT_DELAY_SECONDS,
     TRANSIENT_FAILURE_GRACE_SECONDS,
 )
+from .decryption import DecryptionError, normalize_key
 from .grace import LastKnownData
 from .parser import parse_dsmr_telegram
 
@@ -47,7 +51,12 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
         self.entry = entry
         self.host: str = entry.options.get(CONF_HOST, entry.data[CONF_HOST])
         self.session: ClientSession = async_get_clientsession(hass)
-        self.client = HomeyP1Client(self.session, self.host)
+        self.client = HomeyP1Client(
+            self.session,
+            self.host,
+            normalize_key(_entry_value(entry, CONF_ENCRYPTION_KEY)),
+            normalize_key(_entry_value(entry, CONF_AUTHENTICATION_KEY)),
+        )
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
         self._first_update = asyncio.Event()
@@ -114,6 +123,14 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
                 )
             except LocalAPIDisabledError as err:
                 _LOGGER.warning("Homey P1 Local API is disabled: %s", err)
+            except EncryptionKeyRequiredError as err:
+                _LOGGER.warning(
+                    "Homey P1 meter sends encrypted telegrams: %s. Add the "
+                    "encryption key in the integration options.",
+                    err,
+                )
+            except DecryptionError as err:
+                _LOGGER.warning("Homey P1 could not decrypt telegram: %s", err)
             except CannotConnectError as err:
                 _LOGGER.warning("Homey P1 websocket closed: %s", err)
             except (ClientError, TimeoutError, ValueError, WSMessageTypeError) as err:
@@ -240,3 +257,11 @@ class HomeyP1Coordinator(DataUpdateCoordinator[dict[str, object]]):
     def primary_device_identifier(self) -> tuple[str, str]:
         """Return the stable parent device identifier."""
         return (self.entry.domain, f"host:{self.host.lower()}")
+
+
+def _entry_value(entry: ConfigEntry, key: str) -> str | None:
+    """Return an option value, falling back to the config entry data."""
+    value = entry.options.get(key)
+    if value:
+        return value
+    return entry.data.get(key) or None

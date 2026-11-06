@@ -250,3 +250,17 @@ class ParseTelegramTests(unittest.TestCase):
             [parser.parse_dsmr_telegram(item)["dsmr_version"] for item in telegrams],
             ["4.0", "4.2"],
         )
+
+    def test_normalizes_austrian_wh_and_w_units(self) -> None:
+        telegram = (FIXTURES_PATH / "austria_sagemcom_t210_d_r.txt").read_text()
+        parsed = parser.parse_dsmr_telegram(telegram)
+
+        self.assertEqual(parsed["meter_manufacturer"], "EST")
+        self.assertEqual(parsed["dsmr_version"], "5.0")
+        self.assertAlmostEqual(parsed["energy_import_total"], 2873.645)
+        self.assertAlmostEqual(parsed["energy_import_tariff_1"], 2418.198)
+        self.assertAlmostEqual(parsed["energy_import_tariff_2"], 455.447)
+        self.assertAlmostEqual(parsed["energy_export_total"], 0.228)
+        # Power is normalized to kW; the sensor layer scales it back to W.
+        self.assertAlmostEqual(parsed["power_consumption"], 0.026)
+        self.assertAlmostEqual(parsed["power_production"], 0.0)
