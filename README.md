@@ -73,13 +73,28 @@ In the integration options, enable **Capture encrypted support diagnostics** to 
 - Parses common DSMR telegram fields
 - Creates Home Assistant sensors for energy, power, gas, voltage, current, and a few diagnostic counters
 
+### Encrypted meters (Austria, Luxembourg, ...)
+
+Some meters encrypt the customer interface (DLMS `general-glo-ciphering`, AES-128-GCM).
+The Homey Energy Dongle forwards these frames unchanged, so Home Assistant has to decrypt them.
+If the integration reports that the meter sends encrypted telegrams, enter the keys from your
+network operator:
+
+- **Encryption key** (Austria: *GUEK*, 32 hex characters) – required for encrypted meters
+- **Authentication key** (Austria: *GAK*, 32 hex characters) – optional; used to verify each telegram
+
+In Austria the keys are shown in your network operator's customer portal after the customer
+interface (Kundenschnittstelle) has been activated. Meters that report energy in `Wh` and power
+in `W` (instead of `kWh` / `kW`) are normalized automatically.
+
+Tested with a Sagemcom T210-D-r (Energienetze Steiermark).
+
 ## Current scope
 
-This first version is focused on unencrypted DSMR telegrams.
+Plain DSMR telegrams and DLMS-encrypted telegrams carrying DSMR text.
 
 ## Notes
 
 - The Homey Energy Dongle must be reachable from Home Assistant on your local network.
 - The Homey Energy Dongle only allows a limited number of WebSocket clients at the same time.
 - Disabling the Local API in Homey will disconnect all active Local API connections.
-- If your meter requires decryption or uses DLMS framing, this integration will need an additional parser step.
