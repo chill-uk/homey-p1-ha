@@ -79,16 +79,12 @@ def async_migrate_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
                 entities.async_update_entity(entity.entity_id, device_id=canonical.id)
 
         # Keep child M-Bus device identities and their linked automations.
-        for child in list(devices.devices.values()):
-            if child.via_device_id == duplicate.id:
-                devices.async_update_device(child.id, via_device_id=canonical.id)
+        for child in dr.async_entries_for_parent_device(devices, duplicate.id):
+            devices.async_update_device(child.id, via_device_id=canonical.id)
 
         if not er.async_entries_for_device(
             entities, duplicate.id, include_disabled_entities=True
-        ) and not any(
-            device.via_device_id == duplicate.id
-            for device in devices.devices.values()
-        ):
+        ) and not dr.async_entries_for_parent_device(devices, duplicate.id):
             devices.async_remove_device(duplicate.id)
             _LOGGER.info(
                 "Merged orphaned Homey P1 device %s into %s",
