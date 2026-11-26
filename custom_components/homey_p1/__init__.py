@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 from .coordinator import HomeyP1Coordinator
+from .device_migration import async_migrate_devices
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Homey P1 from a config entry."""
+    async_migrate_devices(hass, entry)
     coordinator = HomeyP1Coordinator(hass, entry)
     await coordinator.async_start()
     if not await coordinator.async_wait_for_initial_data():
@@ -49,3 +51,24 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_shutdown()
 
     return unload_ok
+
+ 
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: ConfigEntry, device_entry: object
+) -> bool:
+    """Allow removal of orphaned devices belonging to this config entry."""
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    devices = dr.async_get(hass)
+    entities = er.async_get(hass)
+    if entry.entry_id not in device_entry.config_entries:
+        return False
+    if er.async_entries_for_device(
+        entities, device_entry.id, include_disabled_entities=True
+    ):
+        return False
+    return not any(
+        child.via_device_id == device_entry.id
+        for child in devices.devices.values()
+    )
