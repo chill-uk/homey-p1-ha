@@ -88,6 +88,11 @@ class Entities:
 
 dr.DeviceEntry = Device
 dr.async_get = lambda hass: hass.devices
+dr.async_entries_for_parent_device = (
+    lambda registry, parent_id: [
+        d for d in registry.devices.values() if d.via_device_id == parent_id
+    ]
+)
 dr.async_entries_for_config_entry = (
     lambda registry, entry_id: [
         d for d in registry.devices.values() if entry_id in d.config_entries
