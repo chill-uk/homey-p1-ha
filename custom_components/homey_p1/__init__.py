@@ -69,7 +69,4 @@ async def async_remove_config_entry_device(
         entities, device_entry.id, include_disabled_entities=True
     ):
         return False
-    return not any(
-        child.via_device_id == device_entry.id
-        for child in devices.devices.values()
-    )
+    return not dr.async_entries_for_parent_device(devices, device_entry.id)
