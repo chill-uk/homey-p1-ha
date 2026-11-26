@@ -8,6 +8,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
 from .coordinator import HomeyP1Coordinator
@@ -54,15 +56,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
  
 async def async_remove_config_entry_device(
-    hass: HomeAssistant, entry: ConfigEntry, device_entry: object
+    hass: HomeAssistant, entry: ConfigEntry, device_entry: dr.DeviceEntry
 ) -> bool:
     """Allow removal of orphaned devices belonging to this config entry."""
-    from homeassistant.helpers import device_registry as dr
-    from homeassistant.helpers import entity_registry as er
-
     devices = dr.async_get(hass)
     entities = er.async_get(hass)
-    if entry.entry_id not in device_entry.config_entries:
+    if device_entry.config_entries != {entry.entry_id}:
+        return False
+    if (DOMAIN, f"entry:{entry.entry_id}") in device_entry.identifiers:
         return False
     if er.async_entries_for_device(
         entities, device_entry.id, include_disabled_entities=True
