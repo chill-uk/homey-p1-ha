@@ -108,7 +108,9 @@ def parse_dsmr_telegram(telegram: str) -> dict[str, Any]:
         destination = resolve_mapping(source_name, LOCAL_MAPPING)
         if destination is None:
             continue
-        parsed[destination] = _plain_value(source.value)
+        parsed[destination] = _normalize_unit(
+            _plain_value(source.value), getattr(source, "unit", None)
+        )
 
     _normalize_mbus(parsed_telegram, telegram, parsed)
 
@@ -185,6 +187,22 @@ def _plain_value(value: Any) -> Any:
     if isinstance(value, Decimal):
         return float(value)
     return value
+
+
+# Some meters (notably Austrian smart meters behind the customer interface)
+# report energy in Wh and power in W instead of the DSMR kWh / kW. The data
+# contract of this integration is kWh / kW, so scale those values down.
+_UNIT_SCALE = {"wh": 0.001, "w": 0.001}
+
+
+def _normalize_unit(value: Any, unit: str | None) -> Any:
+    """Normalize Wh / W readings to the integration's kWh / kW contract."""
+    if not isinstance(value, (int, float)) or not unit:
+        return value
+    scale = _UNIT_SCALE.get(unit.strip().lower())
+    if scale is None:
+        return value
+    return round(value * scale, 6)
 
 
 def _timestamp_string(value: Any) -> str | None:
